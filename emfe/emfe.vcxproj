@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A1B2C3D4-5678-9ABC-DEF0-112233445566}</ProjectGuid>
+    <RootNamespace>emfe</RootNamespace>
+    <MinimumVisualStudioVersion>18.0</MinimumVisualStudioVersion>
+    <AppContainerApplication>false</AppContainerApplication>
+    <AppxPackage>false</AppxPackage>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ProjectName>emfe</ProjectName>
+    <TargetName>emfe</TargetName>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <MinimumTargetPlatform>10.0.17763.0</MinimumTargetPlatform>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <TargetPlatformVersion>10.0.26100.7705</TargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.17763.0</WindowsTargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <CppWinRTOptimized>true</CppWinRTOptimized>
+    <CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+    <CppWinRTGenerateWindowsMetadata>true</CppWinRTGenerateWindowsMetadata>
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <ResolveNuGetPackages>false</ResolveNuGetPackages>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <IncludePath>$(ProjectDir);$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;DISABLE_XAML_GENERATED_MAIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>wWinMainCRTStartup</EntryPointSymbol>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;DISABLE_XAML_GENERATED_MAIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>wWinMainCRTStartup</EntryPointSymbol>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Precompiled Header -->
+  <ItemGroup>
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader>Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Vt100Terminal.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <!-- Source Files -->
+  <ItemGroup>
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="PluginLoader.h" />
+    <ClInclude Include="Vt100Terminal.h" />
+  </ItemGroup>
+  <!-- IDL Files -->
+  <ItemGroup>
+    <Midl Include="App.idl" />
+    <Midl Include="MainWindow.idl" />
+  </ItemGroup>
+  <!-- XAML Pages -->
+  <ItemGroup>
+    <ApplicationDefinition Include="App.xaml">
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Page Include="MainWindow.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <!-- XAML Code-Behind -->
+  <ItemGroup>
+    <ClInclude Include="App.xaml.h" />
+    <ClCompile Include="App.xaml.cpp" />
+    <ClInclude Include="MainWindow.xaml.h" />
+    <ClCompile Include="MainWindow.xaml.cpp" />
+  </ItemGroup>
+  <!-- NuGet packages -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
+    <PackageReference Include="Microsoft.Windows.CppWinRT" Version="2.0.250303.1" />
+    <PackageReference Include="Microsoft.Windows.ImplementationLibrary" Version="1.0.240803.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+  </ItemGroup>
+  <!-- Copy plugin DLLs into <OutDir>\plugins\ after build -->
+  <ItemGroup>
+    <Content Include="$(ProjectDir)..\..\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll"
+             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <DeploymentContent>true</DeploymentContent>
+      <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="$(ProjectDir)..\..\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll"
+             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <DeploymentContent>true</DeploymentContent>
+      <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="$(ProjectDir)..\..\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll"
+             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <DeploymentContent>true</DeploymentContent>
+      <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
+    </Content>
+    <Content Include="$(ProjectDir)..\..\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll"
+             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <DeploymentContent>true</DeploymentContent>
+      <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+  <!-- Fix MSB8027 duplicate -->
+  <PropertyGroup>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB8027</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+  <Target Name="DeduplicateClCompile" BeforeTargets="ClCompile">
+    <RemoveDuplicates Inputs="@(ClCompile)">
+      <Output TaskParameter="Filtered" ItemName="_DeduplicatedClCompile" />
+    </RemoveDuplicates>
+    <ItemGroup>
+      <ClCompile Remove="@(ClCompile)" />
+      <ClCompile Include="@(_DeduplicatedClCompile)" />
+    </ItemGroup>
+  </Target>
+  <!-- WinUI 3 XAML compiler integration for C++ -->
+  <PropertyGroup>
+    <MarkupCompilePass1DependsOn>ResolveAssemblyReferences;AddXamlCompilerReferences;$(MarkupCompilePass1DependsOn)</MarkupCompilePass1DependsOn>
+    <MarkupCompilePass2DependsOn>ResolveAssemblyReferences;AddXamlCompilerReferences;$(MarkupCompilePass2DependsOn)</MarkupCompilePass2DependsOn>
+    <BeforeClCompileTargets>
+      MarkupCompilePass1;
+      MarkupCompilePass2;
+      $(BeforeClCompileTargets)
+    </BeforeClCompileTargets>
+    <XamlLocalAssembly>$(IntDir)Merged\$(TargetName).winmd</XamlLocalAssembly>
+  </PropertyGroup>
+  <Target Name="AddXamlCompilerReferences">
+    <ItemGroup>
+      <_WinSDKPlatformWinMDs Include="$(WindowsSdkPath)References\$(TargetPlatformVersion)\**\*.winmd" />
+      <ReferencePath Include="@(_WinSDKPlatformWinMDs)" />
+      <XamlReferencesToCompile Include="$(_MuxWinmdDir)Microsoft.UI.Xaml.winmd" />
+      <XamlReferencesToCompile Include="$(_MuxWinmdDir)Microsoft.UI.Text.winmd" />
+      <XamlReferencesToCompile Include="@(_WinSDKPlatformWinMDs)" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <ClCompile Include="$(IntDir)XamlTypeInfo.Impl.g.cpp" />
+    <ClCompile Include="$(IntDir)XamlTypeInfo.g.cpp" />
+  </ItemGroup>
+</Project>

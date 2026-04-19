@@ -1,0 +1,53 @@
+<Application
+    x:Class="emfe.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ThemeWindowBg"        Color="#FF1E1E1E"/>
+                    <SolidColorBrush x:Key="ThemePanelBg"         Color="#FF2D2D30"/>
+                    <SolidColorBrush x:Key="ThemeControlBg"       Color="#FF3E3E42"/>
+                    <SolidColorBrush x:Key="ThemeInputBg"         Color="#FF2D2D30"/>
+                    <SolidColorBrush x:Key="ThemeConsoleBg"       Color="#FF0C0C0C"/>
+                    <SolidColorBrush x:Key="ThemeForeground"      Color="#FFD4D4D4"/>
+                    <SolidColorBrush x:Key="ThemeDimFg"           Color="#FF808080"/>
+                    <SolidColorBrush x:Key="ThemeBorder"          Color="#FF3F3F46"/>
+                    <SolidColorBrush x:Key="ThemeSeparator"       Color="#FF555555"/>
+                    <SolidColorBrush x:Key="ThemeAccent"          Color="#FF569CD6"/>
+                    <SolidColorBrush x:Key="ThemeStatusBarBg"     Color="#FF007ACC"/>
+                    <SolidColorBrush x:Key="ThemeRegHeaderFg"     Color="#FF4EC9B0"/>
+                    <SolidColorBrush x:Key="ThemeBreakpointFg"    Color="#FFFF0000"/>
+                    <SolidColorBrush x:Key="ThemeHighlightedFg"   Color="#FFFFFF00"/>
+                    <SolidColorBrush x:Key="ThemeCheckedBg"       Color="#FF264F78"/>
+                    <SolidColorBrush x:Key="ThemeConsoleFg"       Color="#FF00FF00"/>
+                    <SolidColorBrush x:Key="ThemeWarningFg"       Color="#FFFFA500"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ThemeWindowBg"        Color="#FFF5F5F5"/>
+                    <SolidColorBrush x:Key="ThemePanelBg"         Color="#FFE8E8E8"/>
+                    <SolidColorBrush x:Key="ThemeControlBg"       Color="#FFD6D6D6"/>
+                    <SolidColorBrush x:Key="ThemeInputBg"         Color="#FFFFFFFF"/>
+                    <SolidColorBrush x:Key="ThemeConsoleBg"       Color="#FFFFFFFF"/>
+                    <SolidColorBrush x:Key="ThemeForeground"      Color="#FF1E1E1E"/>
+                    <SolidColorBrush x:Key="ThemeDimFg"           Color="#FF666666"/>
+                    <SolidColorBrush x:Key="ThemeBorder"          Color="#FFCCCCCC"/>
+                    <SolidColorBrush x:Key="ThemeSeparator"       Color="#FFCCCCCC"/>
+                    <SolidColorBrush x:Key="ThemeAccent"          Color="#FF0066CC"/>
+                    <SolidColorBrush x:Key="ThemeStatusBarBg"     Color="#FF007ACC"/>
+                    <SolidColorBrush x:Key="ThemeRegHeaderFg"     Color="#FF008080"/>
+                    <SolidColorBrush x:Key="ThemeBreakpointFg"    Color="#FFCC0000"/>
+                    <SolidColorBrush x:Key="ThemeHighlightedFg"   Color="#FF996600"/>
+                    <SolidColorBrush x:Key="ThemeCheckedBg"       Color="#FFB8D4F0"/>
+                    <SolidColorBrush x:Key="ThemeConsoleFg"       Color="#FF006600"/>
+                    <SolidColorBrush x:Key="ThemeWarningFg"       Color="#FFCC6600"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

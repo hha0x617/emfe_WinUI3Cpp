@@ -1,0 +1,54 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM/
+ARM64/
+
+# C++ build artifacts
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+*.o
+*.ipch
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+*.vcxproj.FileListAbsolute.txt
+
+# WinUI3 / XAML Cpp generated
+Generated Files/
+*.tlog
+*.aps
+
+# NuGet
+packages/
+*.nupkg
+.nuget/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local snapshots
+*.zip
+*.7z
+
+# vcxproj.user can contain local paths / launch config; keep out of history
+*.vcxproj.user
