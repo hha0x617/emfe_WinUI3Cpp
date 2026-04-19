@@ -1,0 +1,219 @@
+#pragma once
+
+#include "MainWindow.g.h"
+#include "PluginLoader.h"
+#include "Vt100Terminal.h"
+#include <queue>
+#include <mutex>
+#include <regex>
+#include <filesystem>
+
+namespace winrt::emfe::implementation
+{
+    struct MainWindow : MainWindowT<MainWindow>
+    {
+        MainWindow();
+
+        // XAML event handlers
+        void OnLoadElf(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnLoadSrec(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnLoadBinary(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnStep(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnStepOver(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnRun(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnStop(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnStepOut(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnReset(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnFullReset(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnMemoryGo(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmGo(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmDoubleTapped(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
+        void OnToggleConsole(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnOpenBreakpoints(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnOpenCallStack(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnOpenFramebuffer(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnOpenSettings(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnRegEdit(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnRegApply(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnRegCancel(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        winrt::fire_and_forget OnSwitchPlugin(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnMemEdit(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnMemApply(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnMemCancel(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+
+    private:
+        void LoadPlugin();
+        std::vector<std::filesystem::path> ScanPlugins();
+        bool LoadPluginFromPath(const std::filesystem::path& path, bool savePreference = true);
+        void AutoLoadKernelFromSettings();
+        void ApplyCapabilityVisibility();
+        void SavePluginPath(const std::filesystem::path& path);
+        std::filesystem::path ReadSavedPluginPath();
+        void DestroyCurrentInstance();
+        void RegisterInstanceCallbacks();
+        void BuildRegisterPanel();
+        void UpdateRegisters();
+        void UpdateDisassembly();
+        void UpdateMemoryDump(uint32_t address);
+        void UpdateToolbarState();
+        void SetStatus(const std::wstring& text);
+
+        // Helper: add a register row (label + textbox) to a StackPanel
+        Microsoft::UI::Xaml::Controls::TextBox AddRegRow(
+            Microsoft::UI::Xaml::Controls::StackPanel const& parent,
+            const char* name, uint32_t regId, int textboxWidth = 95);
+
+        // Helper: add a register pair to a 2-column grid
+        void AddRegPairToGrid(
+            Microsoft::UI::Xaml::Controls::Grid const& grid,
+            int row, int col,
+            const char* name, uint32_t regId);
+
+        PluginLoader m_plugin;
+        EmfeInstance m_instance = nullptr;
+        std::wstring m_loadedPluginStem;  // DLL filename without extension
+        uint64_t m_capabilities = 0;       // EMFE_CAP_* bitmask reported by current plugin
+        uint32_t m_pcRegId = 16;           // reg_id of the PC register (discovered via EMFE_REG_FLAG_PC)
+
+        struct RegUIEntry {
+            uint32_t regId;
+            uint32_t bitWidth;
+            EmfeRegType type;
+            Microsoft::UI::Xaml::Controls::TextBox valueBox{ nullptr };
+        };
+        std::vector<RegUIEntry> m_regEntries;
+
+        // SR flag checkboxes
+        struct FlagCheckEntry {
+            uint8_t bitMask;
+            Microsoft::UI::Xaml::Controls::CheckBox checkBox{ nullptr };
+        };
+        std::vector<FlagCheckEntry> m_flagEntries;
+
+        // Memory cell grid
+        static constexpr int MemRows = 16;
+        static constexpr int MemCols = 16;
+        std::vector<std::vector<Microsoft::UI::Xaml::Controls::TextBox>> m_memCellBoxes;
+        std::vector<Microsoft::UI::Xaml::Controls::TextBlock> m_memAddrLabels;
+        std::vector<Microsoft::UI::Xaml::Controls::TextBlock> m_memAsciiLabels;
+        bool m_memGridBuilt = false;
+        bool m_memEditMode = false;
+        void BuildMemoryGrid();
+        void SelectMemoryCell(int row, int col);
+
+        // Breakpoints
+        std::unordered_map<uint32_t, bool> m_breakpointAddresses; // address → enabled
+        void ToggleBreakpoint(uint32_t address);
+
+        // Disassembly line addresses (parallel to DisasmList items)
+        std::vector<uint32_t> m_disasmAddresses;
+
+        // Console window (separate Window)
+        Microsoft::UI::Xaml::Window m_consoleWindow{ nullptr };
+        // Settings window (separate Window)
+        Microsoft::UI::Xaml::Window m_settingsWindow{ nullptr };
+        struct SettingUI {
+            std::string key;
+            EmfeSettingType type;
+            Windows::Foundation::IInspectable control{ nullptr };
+        };
+        std::vector<SettingUI> m_settingControls;
+        bool m_settingsRebuilding = false;
+        // Staged edit model for EMFE_SETTING_LIST settings. Populated lazily
+        // when the Settings dialog is opened; all dialog mutations (add,
+        // remove, edit field) go here. Applied to the plugin only on OK.
+        struct ListItemEdit {
+            std::unordered_map<std::string, std::string> fields;
+        };
+        struct ListEdit {
+            std::vector<ListItemEdit> items;
+        };
+        std::unordered_map<std::string, ListEdit> m_pendingLists;
+        void BuildSettingsContent();
+        void SaveSettingsToStaging();
+        void EnsureListStaged(std::string const& listKey);
+        void ApplyStagedListsToPlugin();
+        bool IsSettingVisible(const EmfeSettingDef* defs, int32_t count, int32_t idx);
+        void BuildListControl(Microsoft::UI::Xaml::Controls::StackPanel const& parent,
+                              std::string const& listKey, std::string const& label);
+        std::unordered_set<int> GetUsedScsiIds(std::string const& listKey, int excludeIndex);
+        // Breakpoints window (separate Window)
+        Microsoft::UI::Xaml::Window m_breakpointsWindow{ nullptr };
+        void BuildBreakpointsUI();
+        void RefreshBreakpointsWindow();
+        void SyncBreakpointsFromPlugin();
+        // Call Stack window (separate Window)
+        Microsoft::UI::Xaml::Window m_callStackWindow{ nullptr };
+        void BuildCallStackUI();
+        void RefreshCallStackWindow();
+
+        // Custom Grid subclass exposing ProtectedCursor (for cursor control)
+        struct CursorGrid : Microsoft::UI::Xaml::Controls::GridT<CursorGrid>
+        {
+            void SetCursor(Microsoft::UI::Input::InputCursor const& cursor) { ProtectedCursor(cursor); }
+        };
+
+        // Framebuffer window (separate Window)
+        Microsoft::UI::Xaml::Window m_framebufferWindow{ nullptr };
+        Microsoft::UI::Xaml::Controls::Image m_fbImage{ nullptr };
+        Microsoft::UI::Xaml::Controls::TextBlock m_fbStatusText{ nullptr };
+        Microsoft::UI::Xaml::Controls::TextBlock m_fbInputStatus{ nullptr };
+        winrt::com_ptr<CursorGrid> m_fbGrid;
+        Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap m_fbBitmap{ nullptr };
+        Microsoft::UI::Xaml::DispatcherTimer m_fbTimer{ nullptr };
+        uint32_t m_fbLastWidth = 0, m_fbLastHeight = 0, m_fbLastBpp = 0;
+        bool m_fbInputCaptured = false;
+        int m_fbFrameCount = 0;
+        std::chrono::steady_clock::time_point m_fbFpsStart;
+        double m_fbCurrentFps = 0;
+        void RefreshFramebufferFrame();
+        void ConvertToBgra(const EmfeFramebufferInfo& info, const uint8_t* src, uint8_t* dst, int dstStride);
+        void NavigateDisassemblyTo(uint32_t address);
+        void UpdateBoardTypeText(winrt::hstring cpuName = L"");
+        uint32_t m_lastStopAddress = 0;
+        EmfeStopReason m_lastStopReason = EMFE_STOP_REASON_NONE;
+        Microsoft::UI::Xaml::Controls::TextBox m_consoleTextBox{ nullptr };
+        Vt100Terminal m_terminal{80, 25, 2000};
+        std::queue<char> m_consoleOutputQueue;
+        std::mutex m_consoleOutputMutex;
+        Microsoft::UI::Dispatching::DispatcherQueueTimer m_consoleRenderTimer{nullptr};
+        void EnsureConsoleWindow();
+        void AppendConsoleChar(char ch);
+
+        // Console search state
+        bool m_consoleSearchMode = false;
+        int m_consoleSearchIndex = -1;
+        std::string m_consoleLastSearchText;
+        Microsoft::UI::Xaml::Controls::TextBox m_searchBox{nullptr};
+        Microsoft::UI::Xaml::Controls::TextBlock m_searchStatus{nullptr};
+        Microsoft::UI::Xaml::Controls::Primitives::ToggleButton m_caseSensitiveToggle{nullptr};
+        Microsoft::UI::Xaml::Controls::Primitives::ToggleButton m_regexToggle{nullptr};
+        Microsoft::UI::Xaml::UIElement m_searchBar{nullptr};
+
+        void OpenConsoleSearch();
+        void CloseConsoleSearch();
+        void ConsoleFindNext();
+        void ConsoleFindPrev();
+        std::vector<std::pair<int, int>> ConsoleCollectMatches(
+            const std::string& text, const std::string& searchText,
+            bool regexMode, bool caseSensitive);
+        void ConsoleHighlightMatch(int pos, int length, int current, int total);
+
+        // Theme
+        bool m_isDark = true;
+        void ApplyTheme(const std::string& themeName);
+        void ApplyThemeToWindow(Microsoft::UI::Xaml::Window const& window, bool isDark);
+        Microsoft::UI::Xaml::Media::Brush GetThemeBrush(const wchar_t* key);
+        void RefreshCodeBehindBrushes();
+
+        uint32_t m_memoryAddress = 0;
+        Microsoft::UI::Dispatching::DispatcherQueue m_dispatcherQueue{ nullptr };
+    };
+}
+
+namespace winrt::emfe::factory_implementation
+{
+    struct MainWindow : MainWindowT<MainWindow, implementation::MainWindow>
+    {
+    };
+}

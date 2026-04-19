@@ -1,0 +1,293 @@
+<Window
+    x:Class="emfe.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Background="{ThemeResource ThemeWindowBg}">
+        <Grid.Resources>
+            <!-- Mono text style -->
+            <Style x:Key="MonoTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <!-- Toolbar button style -->
+            <Style x:Key="ToolBarButtonStyle" TargetType="Button">
+                <Setter Property="Padding" Value="8,3"/>
+                <Setter Property="Margin" Value="2,0"/>
+                <Setter Property="FontSize" Value="12"/>
+            </Style>
+            <!-- Panel header style -->
+            <Style x:Key="PanelHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="Foreground" Value="{ThemeResource ThemeAccent}"/>
+                <Setter Property="Margin" Value="4,2,0,2"/>
+            </Style>
+            <!-- Register group header style -->
+            <Style x:Key="RegGroupHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="FontWeight" Value="Normal"/>
+                <Setter Property="Foreground" Value="{ThemeResource ThemeRegHeaderFg}"/>
+                <Setter Property="Margin" Value="0,6,0,2"/>
+            </Style>
+            <!-- Compact TextBox style (no delete button, minimal height) -->
+            <Style x:Key="CompactTextBoxStyle" TargetType="TextBox">
+                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Foreground" Value="{ThemeResource ThemeForeground}"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Grid>
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal"/>
+                                        <VisualState x:Name="PointerOver"/>
+                                        <VisualState x:Name="Focused"/>
+                                        <VisualState x:Name="Disabled"/>
+                                    </VisualStateGroup>
+                                    <VisualStateGroup x:Name="ButtonStates">
+                                        <VisualState x:Name="ButtonVisible"/>
+                                        <VisualState x:Name="ButtonCollapsed"/>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <Border x:Name="BorderElement"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="0"/>
+                                <ScrollViewer x:Name="ContentElement"
+                                        HorizontalScrollMode="Auto"
+                                        VerticalScrollMode="Disabled"
+                                        HorizontalScrollBarVisibility="Hidden"
+                                        VerticalScrollBarVisibility="Disabled"
+                                        Margin="{TemplateBinding BorderThickness}"
+                                        Padding="{TemplateBinding Padding}"
+                                        IsTabStop="False"
+                                        ZoomMode="Disabled"/>
+                                <TextBlock x:Name="PlaceholderTextContentPresenter"
+                                        Foreground="{ThemeResource TextControlPlaceholderForeground}"
+                                        Text="{TemplateBinding PlaceholderText}"
+                                        Margin="{TemplateBinding BorderThickness}"
+                                        Padding="{TemplateBinding Padding}"
+                                        IsHitTestVisible="False"/>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============================================================ -->
+        <!-- Row 0: Menu Bar                                              -->
+        <!-- ============================================================ -->
+        <MenuBar Grid.Row="0" Background="{ThemeResource ThemePanelBg}">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem x:Name="MenuOpenElf" Text="Open ELF..."
+                                Click="OnLoadElf">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="E"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuOpenSrec" Text="Open S-Record..."
+                                Click="OnLoadSrec">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="S"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuOpenBinary" Text="Open Binary..."
+                                Click="OnLoadBinary"/>
+                <MenuFlyoutSeparator/>
+                <MenuFlyoutItem x:Name="MenuSwitchPlugin" Text="Switch Plugin..." Click="OnSwitchPlugin"/>
+            </MenuBarItem>
+            <MenuBarItem Title="Run">
+                <MenuFlyoutItem Text="Run" Click="OnRun">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F5"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Stop" Click="OnStop">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Shift" Key="F5"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem Text="Step" Click="OnStep">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F10"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuStepOver" Text="Step Over" Click="OnStepOver">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F11"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem x:Name="MenuStepOut" Text="Step Out" Click="OnStepOut">
+                    <MenuFlyoutItem.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Shift" Key="F11"/>
+                    </MenuFlyoutItem.KeyboardAccelerators>
+                </MenuFlyoutItem>
+                <MenuFlyoutSeparator/>
+                <MenuFlyoutItem Text="Reset" Click="OnReset"/>
+                <MenuFlyoutItem Text="Full Reset" Click="OnFullReset"/>
+            </MenuBarItem>
+            <MenuBarItem Title="View">
+                <MenuFlyoutItem Text="Console" Click="OnToggleConsole"/>
+                <MenuFlyoutItem Text="Breakpoints..." Click="OnOpenBreakpoints"/>
+                <MenuFlyoutItem x:Name="MenuCallStack" Text="Call Stack..." Click="OnOpenCallStack"/>
+                <MenuFlyoutItem x:Name="MenuFramebuffer" Text="Framebuffer..." Click="OnOpenFramebuffer"/>
+            </MenuBarItem>
+            <MenuBarItem Title="Settings">
+                <MenuFlyoutItem Text="Emulator Settings..." Click="OnOpenSettings"/>
+            </MenuBarItem>
+        </MenuBar>
+
+        <!-- ============================================================ -->
+        <!-- Row 1: Toolbar                                               -->
+        <!-- ============================================================ -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal"
+                    Background="{ThemeResource ThemePanelBg}" Padding="4,2" Spacing="2">
+            <Button x:Name="BtnRun" Content="Run (F5)" Style="{StaticResource ToolBarButtonStyle}" Click="OnRun"/>
+            <Button x:Name="BtnStop" Content="Stop (Shift+F5)" Style="{StaticResource ToolBarButtonStyle}" Click="OnStop" IsEnabled="False"/>
+            <Button x:Name="BtnStep" Content="Step (F10)" Style="{StaticResource ToolBarButtonStyle}" Click="OnStep"/>
+            <Button x:Name="BtnStepOver" Content="Step Over (F11)" Style="{StaticResource ToolBarButtonStyle}" Click="OnStepOver"/>
+            <Button x:Name="BtnStepOut" Content="Step Out (Shift+F11)" Style="{StaticResource ToolBarButtonStyle}" Click="OnStepOut"/>
+            <Button x:Name="BtnReset" Content="Reset" Style="{StaticResource ToolBarButtonStyle}" Click="OnReset"/>
+            <Button x:Name="BtnFullReset" Content="Full Reset" Style="{StaticResource ToolBarButtonStyle}" Click="OnFullReset"/>
+            <Border Width="1" Background="{ThemeResource ThemeSeparator}" Margin="4,2"/>
+            <TextBlock x:Name="CyclesText" Text="Cycles: 0" Style="{StaticResource MonoTextStyle}" Margin="8,0"/>
+            <TextBlock x:Name="StopReasonText" Text="" Style="{StaticResource MonoTextStyle}" Margin="8,0"
+                       Foreground="{ThemeResource ThemeWarningFg}"/>
+        </StackPanel>
+
+        <!-- ============================================================ -->
+        <!-- Row 2: Main Content (Disasm/Memory left, Registers right)    -->
+        <!-- ============================================================ -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="360"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left side: Disassembly (top) + Memory dump (bottom) -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="3*"/>
+                    <RowDefinition Height="2*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Disassembly Panel -->
+                <Border Grid.Row="0" BorderBrush="{ThemeResource ThemeBorder}" BorderThickness="1" Margin="2">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{ThemeResource ThemePanelBg}" Padding="4,2" Spacing="4">
+                            <TextBlock Text="Disassembly" Style="{StaticResource PanelHeaderStyle}"/>
+                            <TextBlock Text="Address:" Style="{StaticResource MonoTextStyle}" Margin="8,0,0,0"/>
+                            <TextBox x:Name="DisasmAddrBox" Width="80" FontFamily="Consolas" FontSize="13"
+                                     PlaceholderText="hex"/>
+                            <Button Content="Go" Style="{StaticResource ToolBarButtonStyle}" Click="OnDisasmGo"/>
+                            <ToggleButton x:Name="FollowPCToggle" Content="Follow PC" IsChecked="True" Margin="0,0,4,0"/>
+                            <Border Width="1" Background="{ThemeResource ThemeSeparator}" Margin="4,4"/>
+                            <TextBlock x:Name="LoadedFileText" VerticalAlignment="Center" FontSize="12"
+                                       Foreground="{ThemeResource ThemeDimFg}" Margin="4,0,0,0"/>
+                        </StackPanel>
+                        <ListView x:Name="DisasmList" Grid.Row="1"
+                                  Background="{ThemeResource ThemeWindowBg}" SelectionMode="Single"
+                                  DoubleTapped="OnDisasmDoubleTapped">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="MinHeight" Value="0"/>
+                                    <Setter Property="Padding" Value="4,0"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                        </ListView>
+                    </Grid>
+                </Border>
+
+                <!-- Memory Dump Panel -->
+                <Border Grid.Row="1" BorderBrush="{ThemeResource ThemeBorder}" BorderThickness="1" Margin="2">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{ThemeResource ThemePanelBg}" Padding="4,2" Spacing="4">
+                            <TextBlock Text="Memory Dump" Style="{StaticResource PanelHeaderStyle}"/>
+                            <TextBlock Text="Address:" Style="{StaticResource MonoTextStyle}" Margin="8,0,0,0"/>
+                            <TextBox x:Name="TxtMemAddr" Width="80" FontFamily="Consolas" FontSize="13"
+                                     PlaceholderText="hex"/>
+                            <TextBlock Text="Size:" Style="{StaticResource MonoTextStyle}"/>
+                            <TextBox x:Name="MemSizeBox" Width="50" FontFamily="Consolas" FontSize="13" Text="256"/>
+                            <Button Content="Go" Style="{StaticResource ToolBarButtonStyle}" Click="OnMemoryGo"/>
+                            <Border Width="1" Background="{ThemeResource ThemeSeparator}" Margin="4,2"/>
+                            <Button x:Name="BtnMemEdit" Content="Edit" FontSize="11" Padding="6,2"
+                                    Click="OnMemEdit"/>
+                            <Button x:Name="BtnMemApply" Content="Apply" FontSize="11" Padding="6,2"
+                                    Click="OnMemApply" Visibility="Collapsed"/>
+                            <Button x:Name="BtnMemCancel" Content="Cancel" FontSize="11" Padding="6,2"
+                                    Click="OnMemCancel" Visibility="Collapsed"/>
+                        </StackPanel>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Auto" Background="Transparent">
+                            <StackPanel x:Name="MemoryDumpPanel" Background="Transparent"/>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Right side: Register Panel (spans both rows) -->
+            <Border Grid.Column="1" BorderBrush="{ThemeResource ThemeBorder}" BorderThickness="1" Margin="2">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Transparent" Padding="0">
+                    <StackPanel x:Name="RegisterPanel" Margin="4" Background="Transparent">
+                        <!-- Header with Edit/Apply/Cancel -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Registers" Style="{StaticResource PanelHeaderStyle}"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                <Button x:Name="BtnRegEdit" Content="Edit" FontSize="11" Padding="6,2"
+                                        Click="OnRegEdit"/>
+                                <Button x:Name="BtnRegApply" Content="Apply" FontSize="11" Padding="6,2"
+                                        Click="OnRegApply" Visibility="Collapsed"/>
+                                <Button x:Name="BtnRegCancel" Content="Cancel" FontSize="11" Padding="6,2"
+                                        Click="OnRegCancel" Visibility="Collapsed"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Register groups dynamically built from emfe_get_register_defs.
+                             Each group becomes a header + a Grid/StackPanel of rows.
+                             Populated by MainWindow::BuildRegisterPanel(). -->
+                        <StackPanel x:Name="RegGroupsContainer" Spacing="0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- ============================================================ -->
+        <!-- Row 3: Status Bar                                            -->
+        <!-- ============================================================ -->
+        <Border Grid.Row="3" Background="{ThemeResource ThemeStatusBarBg}" Padding="8,4">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="StatusText" Text="No plugin loaded"
+                               Foreground="White" FontSize="12"/>
+                    <TextBlock x:Name="BoardTypeText" Foreground="White" FontSize="12" Margin="16,0,0,0"/>
+                    <TextBlock x:Name="JitStatusText" Foreground="White" FontSize="12" Margin="16,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
