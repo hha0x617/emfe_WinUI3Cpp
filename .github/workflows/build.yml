@@ -18,14 +18,17 @@ jobs:
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Set up NuGet
-        uses: NuGet/setup-nuget@v2
-
-      - name: Restore NuGet packages
-        run: nuget restore emfe_WinUI3Cpp.sln
-
       - name: Build (Release x64)
-        run: msbuild emfe_WinUI3Cpp.sln /p:Configuration=Release /p:Platform=x64 /m
+        # The vcxproj pins PlatformToolset=v145 (VS 18 local), but the
+        # windows-latest runner currently ships v143.  Override via
+        # MSBuild property — matches the approach used by
+        # em68030_WinUI3Cpp's CI.
+        run: >
+          msbuild emfe_WinUI3Cpp.sln -restore
+          /p:Configuration=Release
+          /p:Platform=x64
+          /p:PlatformToolset=v143
+          /m
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
