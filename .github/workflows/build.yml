@@ -124,7 +124,15 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Scanning release/ with Windows Defender..."
-          Update-MpSignature
+          # Signature update is best-effort; occasional failures on the
+          # GitHub runner ("completed with errors") should not fail the
+          # build — the scan still runs with whatever signatures are loaded.
+          try {
+            Update-MpSignature -ErrorAction Stop
+            Write-Host "Signatures updated."
+          } catch {
+            Write-Warning "Signature update failed (continuing with stale signatures): $_"
+          }
           Start-MpScan -ScanType CustomScan -ScanPath "$PWD\release"
           $threats = Get-MpThreatDetection 2>$null
           if ($threats) {
