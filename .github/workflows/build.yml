@@ -1,66 +1,172 @@
-name: Build emfe_WinUI3Cpp
+name: Build and Release
 
 on:
   push:
-    branches: [master, main]
     tags: ['v*']
   pull_request:
     branches: [master, main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build (Release x64)
-        # The vcxproj pins PlatformToolset=v145 (VS 18 local), but the
-        # windows-latest runner currently ships v143.  Override via
-        # MSBuild property — matches the approach used by
-        # em68030_WinUI3Cpp's CI.
-        run: >
-          msbuild emfe_WinUI3Cpp.sln -restore
-          /p:Configuration=Release
-          /p:Platform=x64
-          /p:PlatformToolset=v143
-          /m
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: emfe_WinUI3Cpp-${{ github.sha }}
-          path: |
-            emfe/x64/Release/*.exe
-            emfe/x64/Release/*.dll
-            emfe/x64/Release/Assets/**
-            emfe/x64/Release/resources.pri
-          if-no-files-found: error
-
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
     permissions:
       contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: emfe_WinUI3Cpp-*
-          merge-multiple: true
-          path: dist
 
-      - name: Package
+    steps:
+      - name: Checkout emfe_WinUI3Cpp
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Fetch submodules (emfe_plugins)
+        env:
+          SUBMODULE_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN }}
+        shell: bash
         run: |
-          cd dist
-          zip -r ../emfe_WinUI3Cpp-${{ github.ref_name }}.zip .
+          # Use a PAT for github.com clones so private upstream repos
+          # (emfe_plugins) are reachable.  Remove the secret once
+          # upstream is public — falls through to ambient credentials.
+          if [[ -n "${SUBMODULE_READ_TOKEN}" ]]; then
+            git config --global url."https://x-access-token:${SUBMODULE_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+          # Non-recursive: we only need emfe_plugins/api/emfe_plugin.h.
+          # The inner submodules (em6809, Em68030_WinUI3Cpp) are not
+          # required to build the host.
+          git submodule update --init
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -match "^refs/tags/v(.+)$") {
+            $ver = $Matches[1]
+          } else {
+            $desc = (git describe --tags --abbrev=0 2>$null) ; $null = $LASTEXITCODE
+            if ($desc -match "^v(.+)$") {
+              $ver = $Matches[1]
+            } else {
+              $ver = "0.0.0"
+            }
+          }
+          echo "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        # The vcxproj pins PlatformToolset=v145 (VS 18 local) but the
+        # windows-latest runner currently ships v143; override at build time.
+        run: >
+          msbuild emfe_WinUI3Cpp.sln -restore
+          -p:Configuration=Release
+          -p:Platform=x64
+          -p:PlatformToolset=v143
+          -p:AppVersion=${{ steps.version.outputs.APP_VERSION }}
+          -v:minimal
+
+      # TODO: uncomment once an emfe.Tests project exists.
+      # - name: Test
+      #   run: emfe/x64/Release/emfe.Tests.exe
+
+      - name: Code Analysis
+        shell: cmd
+        run: >
+          msbuild emfe/emfe.vcxproj
+          -p:Configuration=Release
+          -p:Platform=x64
+          -p:PlatformToolset=v143
+          -p:RunCodeAnalysis=true
+          -p:CAExcludePath="$(ProjectDir)ThirdParty"
+          -v:quiet
+          -nologo
+
+      - name: Prepare release artifacts
+        shell: pwsh
+        run: |
+          $src = "emfe/x64/Release"
+          $dst = "release"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+
+          Copy-Item "$src/emfe.exe" $dst
+          Get-ChildItem "$src/*.dll" |
+            Where-Object { $_.Name -notlike "*.Tests.*" } |
+            Copy-Item -Destination $dst
+          Copy-Item "$src/*.pri" $dst -ErrorAction SilentlyContinue
+          Copy-Item "$src/*.xbf" $dst -ErrorAction SilentlyContinue
+
+          if (Test-Path "$src/Assets") {
+            Copy-Item "$src/Assets" "$dst/Assets" -Recurse
+          }
+          if (Test-Path "$src/Microsoft.UI.Xaml") {
+            Copy-Item "$src/Microsoft.UI.Xaml" "$dst/Microsoft.UI.Xaml" -Recurse
+          }
+          if (Test-Path "emfe/Strings") {
+            Copy-Item "emfe/Strings" "$dst/Strings" -Recurse
+          }
+          Get-ChildItem "$src" -Directory |
+            Where-Object { $_.Name -match '^[a-z]{2}(-[A-Za-z]{2,}){0,2}$' } |
+            ForEach-Object { Copy-Item $_.FullName "$dst/$($_.Name)" -Recurse }
+
+          # Drop debug symbols and any test artifacts.
+          Get-ChildItem $dst -Recurse | Where-Object {
+            $_.Name -like "*.pdb" -or $_.Name -like "*Tests*"
+          } | Remove-Item -Force
+
+      - name: Virus scan release artifacts
+        shell: pwsh
+        run: |
+          Write-Host "Scanning release/ with Windows Defender..."
+          Update-MpSignature
+          Start-MpScan -ScanType CustomScan -ScanPath "$PWD\release"
+          $threats = Get-MpThreatDetection 2>$null
+          if ($threats) {
+            Write-Error "Threat detected: $($threats | Format-List | Out-String)"
+            exit 1
+          }
+          Write-Host "Scan passed: no threats detected."
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: emfe_WinUI3Cpp-${{ github.sha }}
+          path: release/**
+          if-no-files-found: error
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: emfe_WinUI3Cpp-*.zip
-          generate_release_notes: true
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          cd release
+          7z a -tzip "../emfe_WinUI3Cpp-${TAG}.zip" . > /dev/null
+          cd ..
+          ZIP="emfe_WinUI3Cpp-${TAG}.zip"
+          # Delete existing release if tag was moved to a new commit.
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" "$ZIP" --title "$TAG" --notes "$(cat <<EOF
+          ## emfe_WinUI3Cpp ${TAG} (C++/WinUI 3)
+
+          emfe emulator frontend — Windows x64, C++/WinRT + WinUI 3.
+
+          ### Assets
+          - **${ZIP}** — unpacked binaries (emfe.exe + runtime dependencies)
+
+          ### Installation
+          Extract the zip anywhere. Drop \`emfe_plugin_*.dll\` files into
+          a \`plugins\\\` directory next to \`emfe.exe\`.
+
+          ### Security
+          - Virus scan: **Passed** (Windows Defender, signatures updated at build time)
+
+          ### Source Code (Apache-2.0)
+          - **Repository**: [emfe_WinUI3Cpp](https://github.com/${{ github.repository }})
+          - **Build workflow**: [.github/workflows/build.yml](https://github.com/${{ github.repository }}/blob/${TAG}/.github/workflows/build.yml)
+          EOF
+          )"
