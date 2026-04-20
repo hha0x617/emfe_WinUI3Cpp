@@ -1,0 +1,3 @@
+[submodule "external/emfe_plugins"]
+	path = external/emfe_plugins
+	url = https://github.com/hha0x617/emfe_plugins.git

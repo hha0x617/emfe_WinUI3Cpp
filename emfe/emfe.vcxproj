@@ -71,7 +71,7 @@
       <PreprocessorDefinitions>_DEBUG;DISABLE_XAML_GENERATED_MAIN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\external\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -93,7 +93,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <Optimization>MaxSpeed</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\external\emfe_plugins\api;$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -150,26 +150,26 @@
   </ItemGroup>
   <!-- Copy plugin DLLs into <OutDir>\plugins\ after build -->
   <ItemGroup>
-    <Content Include="$(ProjectDir)..\..\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll"
-             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll')">
+    <Content Include="$(ProjectDir)..\external\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll"
+             Condition="Exists('$(ProjectDir)..\external\emfe_plugins\mc68030\build\bin\Release\emfe_plugin_mc68030.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <DeploymentContent>true</DeploymentContent>
       <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
     </Content>
-    <Content Include="$(ProjectDir)..\..\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll"
-             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll')">
+    <Content Include="$(ProjectDir)..\external\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll"
+             Condition="Exists('$(ProjectDir)..\external\emfe_plugins\em8\build\bin\Release\emfe_plugin_em8.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <DeploymentContent>true</DeploymentContent>
       <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
     </Content>
-    <Content Include="$(ProjectDir)..\..\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll"
-             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll')">
+    <Content Include="$(ProjectDir)..\external\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll"
+             Condition="Exists('$(ProjectDir)..\external\emfe_plugins\z8000\build\bin\Release\emfe_plugin_z8000.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <DeploymentContent>true</DeploymentContent>
       <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
     </Content>
-    <Content Include="$(ProjectDir)..\..\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll"
-             Condition="Exists('$(ProjectDir)..\..\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll')">
+    <Content Include="$(ProjectDir)..\external\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll"
+             Condition="Exists('$(ProjectDir)..\external\emfe_plugins\mc6809\target\release\emfe_plugin_mc6809.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <DeploymentContent>true</DeploymentContent>
       <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
