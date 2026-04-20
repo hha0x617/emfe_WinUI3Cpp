@@ -46,15 +46,18 @@ jobs:
         id: version
         shell: pwsh
         run: |
+          $ver = "0.0.0"
           if ("${{ github.ref }}" -match "^refs/tags/v(.+)$") {
             $ver = $Matches[1]
           } else {
-            $desc = (git describe --tags --abbrev=0 2>$null) ; $null = $LASTEXITCODE
-            if ($desc -match "^v(.+)$") {
-              $ver = $Matches[1]
-            } else {
-              $ver = "0.0.0"
-            }
+            # `git describe` errors when no tag exists yet — don't fail the step.
+            try {
+              $desc = & git describe --tags --abbrev=0 2>$null
+              if ($LASTEXITCODE -eq 0 -and $desc -match "^v(.+)$") {
+                $ver = $Matches[1]
+              }
+            } catch {}
+            $global:LASTEXITCODE = 0
           }
           echo "APP_VERSION=$ver" >> $env:GITHUB_OUTPUT
 
