@@ -8,7 +8,7 @@
 
 emfe プラグインアーキテクチャの **C++ WinUI3** フロントエンド。
 
-[emfe_plugins/mc68030](../emfe_plugins/mc68030/) 等のプラグイン DLL を `LoadLibrary` + `GetProcAddress` で動的ロードし、レジスタ・逆アセンブリ・メモリダンプ・コンソールを表示します。
+[emfe_plugins/mc68030](https://github.com/hha0x617/emfe_plugins/tree/master/mc68030) 等のプラグイン DLL を `LoadLibrary` + `GetProcAddress` で動的ロードし、レジスタ・逆アセンブリ・メモリダンプ・コンソールを表示します。
 
 ## 機能
 
@@ -38,10 +38,25 @@ emfe_WinUI3Cpp/
 
 ## 依存関係
 
-| 依存先 | 想定パス | 内容 |
-|-------|---------|-----|
-| `emfe_plugins/api` | `../../emfe_plugins/api` | `emfe_plugin.h` (共通 C ABI ヘッダ) |
-| `emfe_plugin_mc68030.dll` 等 | `../../emfe_plugins/{mc68030,em8,z8000,mc6809}/build/bin/Release/` (mc6809 は `target/release/`) | プラグイン DLL |
+[emfe_plugins](https://github.com/hha0x617/emfe_plugins) は submodule
+として `external/emfe_plugins` に取り込んでいます。
+`git clone --recurse-submodules` で自動取得、プレーンクローン後なら
+`git submodule update --init` で展開してください。
+
+vcxproj 内の各参照は **vcxproj 自身 (`emfe/emfe.vcxproj`) からの相対パス**:
+
+| 依存先 | 想定パス (`emfe/emfe.vcxproj` から見て) | 用途 |
+|-------|----------------------------------------|------|
+| `emfe_plugin.h` | `..\external\emfe_plugins\api\` | 共通 C ABI ヘッダ (ビルド時必須) |
+| `emfe_plugin_mc68030.dll` | `..\external\emfe_plugins\mc68030\build\bin\Release\` | 実行時プラグイン (ビルドされていれば自動コピー) |
+| `emfe_plugin_em8.dll` | `..\external\emfe_plugins\em8\build\bin\Release\` | 実行時プラグイン (ビルドされていれば自動コピー) |
+| `emfe_plugin_z8000.dll` | `..\external\emfe_plugins\z8000\build\bin\Release\` | 実行時プラグイン (ビルドされていれば自動コピー) |
+| `emfe_plugin_mc6809.dll` | `..\external\emfe_plugins\mc6809\target\release\` | 実行時プラグイン (ビルドされていれば自動コピー) |
+
+各 `<Content Include>` は `Condition="Exists(...)"` で守られているため、
+プラグイン DLL が欠けても build は止まらず、Switch Plugin ダイアログに
+該当項目が現れないだけです。DLL を同梱したい場合は、
+`external/emfe_plugins/<name>/` 側を先にビルドしてください。
 
 vcxproj にはビルド時に上記パスからプラグイン DLL を出力ディレクトリの
 `plugins\` サブディレクトリへコピーする `Content` アイテムを設定済み。
@@ -94,12 +109,12 @@ DLL スキャン:
 
 ## 関連プロジェクト
 
-- [emfe_plugins/api](../emfe_plugins/api/) — 共通 C ABI ヘッダ + 開発者ドキュメント
-- [emfe_plugins/mc68030](../emfe_plugins/mc68030/) — MC68030 プラグイン DLL
-- [emfe_plugins/em8](../emfe_plugins/em8/) — EM8 (自作 8-bit 学習用) プラグイン
-- [emfe_plugins/z8000](../emfe_plugins/z8000/) — Zilog Z8000 ファミリープラグイン
-- [emfe_plugins/mc6809](../emfe_plugins/mc6809/) — Motorola MC6809 プラグイン (Rust)
-- [emfe_CsWPF](../emfe_CsWPF/) — C# WPF フロントエンド (同等機能)
+- [emfe_plugins/api](https://github.com/hha0x617/emfe_plugins/tree/master/api) — 共通 C ABI ヘッダ + 開発者ドキュメント
+- [emfe_plugins/mc68030](https://github.com/hha0x617/emfe_plugins/tree/master/mc68030) — MC68030 プラグイン DLL
+- [emfe_plugins/em8](https://github.com/hha0x617/emfe_plugins/tree/master/em8) — EM8 (ABI 検証用の自作最小 8bit CPU) プラグイン
+- [emfe_plugins/z8000](https://github.com/hha0x617/emfe_plugins/tree/master/z8000) — Zilog Z8000 ファミリープラグイン
+- [emfe_plugins/mc6809](https://github.com/hha0x617/emfe_plugins/tree/master/mc6809) — Motorola MC6809 プラグイン (Rust)
+- [emfe_CsWPF](https://github.com/hha0x617/emfe_CsWPF) — C# WPF フロントエンド (同等機能)
 
 ## ライセンス
 

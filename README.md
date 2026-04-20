@@ -45,15 +45,30 @@ emfe_WinUI3Cpp/
 
 ## Dependencies
 
-| Depends on | Expected path | Purpose |
-|-----------|---------------|---------|
-| `emfe_plugins/api` | `external/emfe_plugins/api` (submodule) | `emfe_plugin.h` — the shared C ABI header, required at build time |
-| `emfe_plugin_mc68030.dll` and peers | `external/emfe_plugins/{mc68030,em8,z8000,mc6809}/build/bin/Release/` (mc6809 at `target/release/`) | Plugin DLLs, loaded at runtime |
+[emfe_plugins](https://github.com/hha0x617/emfe_plugins) is vendored as a
+submodule at `external/emfe_plugins`.  `git clone --recurse-submodules`
+pulls it automatically; a plain clone needs `git submodule update --init`.
 
-The vcxproj declares `Content` items that copy the plugin DLLs from the
-paths above into the output directory's `plugins\` subdirectory at build
-time.  At startup the front-end scans `plugins\emfe_plugin_*.dll` and lists
-the results in the "Switch Plugin" dialog.
+The vcxproj references these paths **relative to itself**
+(`emfe/emfe.vcxproj`):
+
+| Depends on | Expected path (from `emfe/emfe.vcxproj`) | Purpose |
+|-----------|------------------------------------------|---------|
+| `emfe_plugin.h` | `..\external\emfe_plugins\api\` | C ABI header, required at build time |
+| `emfe_plugin_mc68030.dll` | `..\external\emfe_plugins\mc68030\build\bin\Release\` | Runtime plugin (copied if built) |
+| `emfe_plugin_em8.dll` | `..\external\emfe_plugins\em8\build\bin\Release\` | Runtime plugin (copied if built) |
+| `emfe_plugin_z8000.dll` | `..\external\emfe_plugins\z8000\build\bin\Release\` | Runtime plugin (copied if built) |
+| `emfe_plugin_mc6809.dll` | `..\external\emfe_plugins\mc6809\target\release\` | Runtime plugin (copied if built) |
+
+Each `<Content Include>` guards with `Condition="Exists(...)"`, so missing
+plugin DLLs are silently skipped — the host simply won't see them in the
+Switch Plugin dialog.  Build the plugins inside
+`external/emfe_plugins/<name>/` first if you want them bundled.
+
+At build time the vcxproj copies the DLLs into the output directory's
+`plugins\` subdirectory.  At startup the front-end scans
+`plugins\emfe_plugin_*.dll` and lists the results in the "Switch Plugin"
+dialog.
 
 ### System requirements
 
