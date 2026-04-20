@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a crash, hang, UI glitch, or unexpected behaviour in the host
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.  If the problem looks
+        like a CPU/device bug (wrong register value, wrong instruction
+        result, etc.) please file it under
+        [emfe_plugins](https://github.com/hha0x617/emfe_plugins/issues/new/choose)
+        instead — this repo is the WinUI 3 host only.
+
+  - type: input
+    id: host-version
+    attributes:
+      label: emfe_WinUI3Cpp version
+      description: Release tag (e.g. `v0.1.0`) or commit hash
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin in use (if relevant)
+      description: Which plugin was loaded when the bug occurred?
+      placeholder: emfe_plugin_mc6809 v0.1.0
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 24H2 x64
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Launch emfe.exe
+        2. Plugin select dialog → MC6809
+        3. Load `forth.s19`
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / screenshots
+      render: shell

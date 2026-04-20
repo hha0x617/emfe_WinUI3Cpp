@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/hha0x617/emfe_WinUI3Cpp/security/advisories/new
+    about: Please report security issues privately via Private Vulnerability Reporting (see SECURITY.md).
+  - name: Plugin-specific bug
+    url: https://github.com/hha0x617/emfe_plugins/issues/new/choose
+    about: If the issue looks like a CPU/device bug rather than a UI problem, file it under emfe_plugins instead.
+  - name: Question / Discussion
+    url: https://github.com/hha0x617/emfe_WinUI3Cpp/discussions
+    about: For general questions, ideas, or help requests, start a discussion.

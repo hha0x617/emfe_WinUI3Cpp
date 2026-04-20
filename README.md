@@ -1,5 +1,9 @@
 # emfe_WinUI3Cpp
 
+[![Build and Release](https://github.com/hha0x617/emfe_WinUI3Cpp/actions/workflows/build.yml/badge.svg)](https://github.com/hha0x617/emfe_WinUI3Cpp/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/hha0x617/emfe_WinUI3Cpp?include_prereleases&sort=semver)](https://github.com/hha0x617/emfe_WinUI3Cpp/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 emfe プラグインアーキテクチャの **C++ WinUI3** フロントエンド。
 
 [emfe_plugins/mc68030](../emfe_plugins/mc68030/) 等のプラグイン DLL を `LoadLibrary` + `GetProcAddress` で動的ロードし、レジスタ・逆アセンブリ・メモリダンプ・コンソールを表示します。
