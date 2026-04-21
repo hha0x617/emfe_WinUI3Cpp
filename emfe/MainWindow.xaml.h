@@ -209,6 +209,9 @@ namespace winrt::emfe::implementation
         void SetupConsoleContextMenu();
         void DoConsoleCopy();
         void DoConsolePaste();
+        // Member coroutine so `this` is a real pointer (not a lambda's
+        // captured-this, which dangles once the enclosing method returns).
+        winrt::fire_and_forget RunConsolePaste(std::wstring normalized);
         void DoConsoleSelectAll();
         std::atomic<bool> m_consolePasteCancel{false};
         std::atomic<bool> m_consolePasteActive{false};

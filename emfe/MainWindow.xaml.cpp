@@ -2187,133 +2187,155 @@ namespace winrt::emfe::implementation
 
         stampTitle(std::format(L"got {} chars", normalized.size()));
 
-        auto pasteOp = [this, stampTitle, normalized = std::move(normalized)]() mutable -> winrt::fire_and_forget {
-            // Hold a strong reference so teardown during a long paste
-            // doesn't dangle `this`, and guarantee cleanup on every exit.
-            auto self = get_strong();
-            struct CleanupGuard {
-                winrt::com_ptr<MainWindow> s;
-                ~CleanupGuard() {
-                    s->m_consolePasteActive.store(false);
-                    s->m_consolePasteCancel.store(false);
-                }
-            } cleanup{ self };
+        // Hand off to a member coroutine. Capturing `this` into a local
+        // lambda would dangle after this method returns — the lambda
+        // object (which holds the captured-this data member) is destroyed,
+        // but the coroutine keeps running and still dereferences the dead
+        // lambda's `this`, reading garbage out of `m_dispatcherQueue`.
+        // A member coroutine takes its own real `this`, and parameters are
+        // copied into the coroutine frame.
+        RunConsolePaste(std::move(normalized));
+    }
 
-            try {
-
-                // Cancel any in-flight paste; mark new one active.
-                if (m_consolePasteActive.exchange(true)) {
-                    m_consolePasteCancel.store(true);
-                    for (int i = 0; i < 500 && m_consolePasteActive.load(); ++i) {
-                        co_await winrt::resume_after(std::chrono::milliseconds(1));
-                    }
-                    co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                    m_consolePasteCancel.store(false);
-                    m_consolePasteActive.store(true);
-                }
-
-                // Capture the original title BEFORE we start stamping "Pasting …"
-                // so the restore at the end returns to the real console title,
-                // not to a leftover "Paste: starting — …" stamp.
-                std::wstring origTitle = m_consoleTitleOrig;
-                if (origTitle.empty() && m_consoleWindow) {
-                    origTitle = std::wstring(m_consoleWindow.Title());
-                    // Strip any lingering "Paste: … — " prefix from prior stamps.
-                    const std::wstring pastePrefix = L"Paste: ";
-                    if (origTitle.starts_with(pastePrefix)) {
-                        auto sep = origTitle.find(L" — ");
-                        if (sep != std::wstring::npos)
-                            origTitle = origTitle.substr(sep + 3);
-                    }
-                }
-                m_consoleTitleOrig = origTitle;
-                int total = static_cast<int>(normalized.size());
-                int sent = 0;
-
-                int probe = -1;
-                if (m_plugin.emfe_console_tx_space)
-                    probe = m_plugin.emfe_console_tx_space(m_instance);
-                bool haveHandshake = probe >= 0;
-                std::wstring mode = haveHandshake ? L"handshake" : L"burst";
-
-                auto updateTitle = [this, &origTitle, total, &mode](int s, bool finished) {
-                    if (!m_consoleWindow) return;
-                    try {
-                        m_consoleWindow.Title(winrt::hstring(std::format(
-                            L"{} {}/{} via {} — {}",
-                            finished ? L"Pasted" : L"Pasting",
-                            s, total, mode, origTitle)));
-                    } catch (...) {}
-                };
-
-                constexpr int Chunk = 64;
-                constexpr int UnboundedThreshold = 1024;
-                constexpr int UnboundedBurstPauseMs = 10;
-                constexpr int StallBreakMs = 5000;
-
-                updateTitle(0, false);
-
-                if (haveHandshake) {
-                    int stallMs = 0;
-                    while (sent < total) {
-                        if (m_consolePasteCancel.load()) break;
-                        int space = m_plugin.emfe_console_tx_space(m_instance);
-                        if (space <= 0) {
-                            co_await winrt::resume_after(std::chrono::milliseconds(1));
-                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                            stallMs += 1;
-                            if (stallMs >= StallBreakMs) break;
-                            continue;
-                        }
-                        stallMs = 0;
-                        bool unbounded = space >= UnboundedThreshold;
-                        int n = (std::min)((std::min)(space, Chunk), total - sent);
-                        for (int k = 0; k < n; ++k)
-                            m_plugin.emfe_send_char(m_instance,
-                                static_cast<char>(normalized[sent + k]));
-                        sent += n;
-                        updateTitle(sent, false);
-                        if (unbounded) {
-                            co_await winrt::resume_after(std::chrono::milliseconds(UnboundedBurstPauseMs));
-                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                        } else {
-                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                        }
-                    }
-                } else {
-                    int count = 0;
-                    while (sent < total) {
-                        if (m_consolePasteCancel.load()) break;
-                        m_plugin.emfe_send_char(m_instance,
-                            static_cast<char>(normalized[sent++]));
-                        if (++count >= Chunk) {
-                            count = 0;
-                            updateTitle(sent, false);
-                            co_await winrt::resume_after(std::chrono::milliseconds(1));
-                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                        }
-                    }
-                }
-
-                updateTitle(sent, true);
-                co_await winrt::resume_after(std::chrono::milliseconds(2500));
-                co_await ResumeOnDispatcher{ m_dispatcherQueue };
-                if (m_consoleWindow) {
-                    try { m_consoleWindow.Title(winrt::hstring(origTitle)); } catch (...) {}
-                }
-                m_consoleTitleOrig.clear();
-            } catch (winrt::hresult_error const& e) {
-                stampTitle(std::format(L"paste failed hr={:#010x}",
-                    static_cast<uint32_t>(e.code().value)));
-            } catch (std::exception const& ex) {
-                std::string msg = ex.what();
-                std::wstring wmsg(msg.begin(), msg.end());
-                stampTitle(std::format(L"paste threw: {}", wmsg));
-            } catch (...) {
-                stampTitle(L"paste threw unknown exception");
+    winrt::fire_and_forget MainWindow::RunConsolePaste(std::wstring normalized)
+    {
+        // Hold a strong reference so teardown during a long paste doesn't
+        // dangle `this`, and guarantee cleanup on every exit.
+        auto self = get_strong();
+        struct CleanupGuard {
+            winrt::com_ptr<MainWindow> s;
+            ~CleanupGuard() {
+                s->m_consolePasteActive.store(false);
+                s->m_consolePasteCancel.store(false);
             }
+        } cleanup{ self };
+
+        auto stampTitle = [self](std::wstring stage) {
+            if (!self->m_dispatcherQueue) return;
+            self->m_dispatcherQueue.TryEnqueue(
+                [self, stage = std::move(stage)]() {
+                    if (!self->m_consoleWindow) return;
+                    try {
+                        std::wstring base = self->m_consoleTitleOrig.empty()
+                            ? std::wstring(self->m_consoleWindow.Title())
+                            : self->m_consoleTitleOrig;
+                        self->m_consoleWindow.Title(winrt::hstring(std::format(
+                            L"Paste: {} — {}", stage, base)));
+                    } catch (...) {}
+                });
         };
-        pasteOp();
+
+        try {
+            // Cancel any in-flight paste; mark new one active.
+            if (m_consolePasteActive.exchange(true)) {
+                m_consolePasteCancel.store(true);
+                for (int i = 0; i < 500 && m_consolePasteActive.load(); ++i) {
+                    co_await winrt::resume_after(std::chrono::milliseconds(1));
+                }
+                co_await ResumeOnDispatcher{ m_dispatcherQueue };
+                m_consolePasteCancel.store(false);
+                m_consolePasteActive.store(true);
+            }
+
+            // Capture the original title BEFORE we start stamping "Pasting …"
+            // so the restore at the end returns to the real console title,
+            // not to a leftover "Paste: starting — …" stamp.
+            std::wstring origTitle = m_consoleTitleOrig;
+            if (origTitle.empty() && m_consoleWindow) {
+                origTitle = std::wstring(m_consoleWindow.Title());
+                const std::wstring pastePrefix = L"Paste: ";
+                if (origTitle.starts_with(pastePrefix)) {
+                    auto sep = origTitle.find(L" — ");
+                    if (sep != std::wstring::npos)
+                        origTitle = origTitle.substr(sep + 3);
+                }
+            }
+            m_consoleTitleOrig = origTitle;
+            int total = static_cast<int>(normalized.size());
+            int sent = 0;
+
+            int probe = -1;
+            if (m_plugin.emfe_console_tx_space)
+                probe = m_plugin.emfe_console_tx_space(m_instance);
+            bool haveHandshake = probe >= 0;
+            std::wstring mode = haveHandshake ? L"handshake" : L"burst";
+
+            auto updateTitle = [this, &origTitle, total, &mode](int s, bool finished) {
+                if (!m_consoleWindow) return;
+                try {
+                    m_consoleWindow.Title(winrt::hstring(std::format(
+                        L"{} {}/{} via {} — {}",
+                        finished ? L"Pasted" : L"Pasting",
+                        s, total, mode, origTitle)));
+                } catch (...) {}
+            };
+
+            constexpr int Chunk = 64;
+            constexpr int UnboundedThreshold = 1024;
+            constexpr int UnboundedBurstPauseMs = 10;
+            constexpr int StallBreakMs = 5000;
+
+            updateTitle(0, false);
+
+            if (haveHandshake) {
+                int stallMs = 0;
+                while (sent < total) {
+                    if (m_consolePasteCancel.load()) break;
+                    int space = m_plugin.emfe_console_tx_space(m_instance);
+                    if (space <= 0) {
+                        co_await winrt::resume_after(std::chrono::milliseconds(1));
+                        co_await ResumeOnDispatcher{ m_dispatcherQueue };
+                        stallMs += 1;
+                        if (stallMs >= StallBreakMs) break;
+                        continue;
+                    }
+                    stallMs = 0;
+                    bool unbounded = space >= UnboundedThreshold;
+                    int n = (std::min)((std::min)(space, Chunk), total - sent);
+                    for (int k = 0; k < n; ++k)
+                        m_plugin.emfe_send_char(m_instance,
+                            static_cast<char>(normalized[sent + k]));
+                    sent += n;
+                    updateTitle(sent, false);
+                    if (unbounded) {
+                        co_await winrt::resume_after(std::chrono::milliseconds(UnboundedBurstPauseMs));
+                        co_await ResumeOnDispatcher{ m_dispatcherQueue };
+                    } else {
+                        co_await ResumeOnDispatcher{ m_dispatcherQueue };
+                    }
+                }
+            } else {
+                int count = 0;
+                while (sent < total) {
+                    if (m_consolePasteCancel.load()) break;
+                    m_plugin.emfe_send_char(m_instance,
+                        static_cast<char>(normalized[sent++]));
+                    if (++count >= Chunk) {
+                        count = 0;
+                        updateTitle(sent, false);
+                        co_await winrt::resume_after(std::chrono::milliseconds(1));
+                        co_await ResumeOnDispatcher{ m_dispatcherQueue };
+                    }
+                }
+            }
+
+            updateTitle(sent, true);
+            co_await winrt::resume_after(std::chrono::milliseconds(2500));
+            co_await ResumeOnDispatcher{ m_dispatcherQueue };
+            if (m_consoleWindow) {
+                try { m_consoleWindow.Title(winrt::hstring(origTitle)); } catch (...) {}
+            }
+            m_consoleTitleOrig.clear();
+        } catch (winrt::hresult_error const& e) {
+            stampTitle(std::format(L"paste failed hr={:#010x}",
+                static_cast<uint32_t>(e.code().value)));
+        } catch (std::exception const& ex) {
+            std::string msg = ex.what();
+            std::wstring wmsg(msg.begin(), msg.end());
+            stampTitle(std::format(L"paste threw: {}", wmsg));
+        } catch (...) {
+            stampTitle(L"paste threw unknown exception");
+        }
     }
 
     void MainWindow::AppendConsoleChar(char ch)
