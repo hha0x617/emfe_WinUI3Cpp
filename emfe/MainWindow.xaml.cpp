@@ -30,6 +30,26 @@ static HWND GetWindowHandle(Microsoft::UI::Xaml::Window const& window)
     return hwnd;
 }
 
+// Lightweight awaiter that resumes on the DispatcherQueue. Stores the queue
+// BY VALUE so the coroutine frame keeps it alive across the suspension —
+// wil::resume_foreground stores it by reference and that reference was
+// going stale (m_dispatcher = 0x7D0 garbage pointer observed in debugger),
+// which terminated the fire_and_forget coroutine during paste.
+struct ResumeOnDispatcher
+{
+    Microsoft::UI::Dispatching::DispatcherQueue queue{ nullptr };
+    bool await_ready() const noexcept { return queue && queue.HasThreadAccess(); }
+    void await_suspend(std::coroutine_handle<> h) const
+    {
+        if (queue) {
+            queue.TryEnqueue([h]() { h.resume(); });
+        } else {
+            h.resume();
+        }
+    }
+    void await_resume() const noexcept {}
+};
+
 namespace winrt::emfe::implementation
 {
     MainWindow::MainWindow()
@@ -2116,7 +2136,58 @@ namespace winrt::emfe::implementation
         };
         stampTitle(L"starting");
 
-        auto pasteOp = [this, stampTitle]() -> winrt::fire_and_forget {
+        // Read the clipboard synchronously via the Win32 API. WinRT's
+        // DataPackageView / GetTextAsync is unreliable in unpackaged
+        // WinUI 3 apps — the async continuation resumes on threads where
+        // the coroutine machinery misbehaves and terminates the process.
+        // Win32 clipboard is synchronous and well understood.
+        std::wstring normalized;
+        {
+            HWND owner = m_consoleWindow ? GetWindowHandle(m_consoleWindow) : nullptr;
+            if (!::OpenClipboard(owner)) {
+                stampTitle(std::format(L"OpenClipboard failed gle={}", ::GetLastError()));
+                return;
+            }
+            HANDLE h = ::GetClipboardData(CF_UNICODETEXT);
+            if (!h) {
+                stampTitle(L"clipboard has no text");
+                ::CloseClipboard();
+                return;
+            }
+            auto p = static_cast<const wchar_t*>(::GlobalLock(h));
+            if (!p) {
+                stampTitle(L"GlobalLock failed");
+                ::CloseClipboard();
+                return;
+            }
+            std::wstring text(p);
+            ::GlobalUnlock(h);
+            ::CloseClipboard();
+            if (text.empty()) {
+                stampTitle(L"clipboard text empty");
+                return;
+            }
+
+            // Normalize line endings to LF (matches emfe_CsWPF).
+            normalized.reserve(text.size());
+            for (size_t k = 0; k < text.size(); ++k) {
+                wchar_t c = text[k];
+                if (c == L'\r') {
+                    normalized.push_back(L'\n');
+                    if (k + 1 < text.size() && text[k + 1] == L'\n') ++k;
+                } else {
+                    normalized.push_back(c);
+                }
+            }
+            if (normalized.empty()) {
+                stampTitle(L"normalized empty");
+                return;
+            }
+        }
+
+        stampTitle(std::format(L"got {} chars", normalized.size()));
+
+        auto pasteOp = [this, stampTitle, normalized = std::move(normalized)]() mutable -> winrt::fire_and_forget {
             // Hold a strong reference so teardown during a long paste
             // doesn't dangle `this`, and guarantee cleanup on every exit.
             auto self = get_strong();
@@ -2129,62 +2200,6 @@ namespace winrt::emfe::implementation
             } cleanup{ self };
 
             try {
-                // Clipboard access must happen on the UI thread — we enter
-                // here synchronously from the MenuFlyoutItem click handler,
-                // which is already UI, so no hop needed yet.
-                Windows::ApplicationModel::DataTransfer::DataPackageView dp{ nullptr };
-                try {
-                    dp = Windows::ApplicationModel::DataTransfer::Clipboard::GetContent();
-                } catch (winrt::hresult_error const& e) {
-                    stampTitle(std::format(L"clipboard error hr={:#010x}",
-                        static_cast<uint32_t>(e.code().value)));
-                    co_return;
-                }
-                if (!dp || !dp.Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::Text())) {
-                    stampTitle(L"clipboard has no text");
-                    co_return;
-                }
-
-                stampTitle(L"reading text");
-                winrt::hstring raw;
-                try {
-                    raw = co_await dp.GetTextAsync();
-                } catch (winrt::hresult_error const& e) {
-                    stampTitle(std::format(L"GetTextAsync failed hr={:#010x}",
-                        static_cast<uint32_t>(e.code().value)));
-                    co_return;
-                } catch (...) {
-                    stampTitle(L"GetTextAsync unknown exception");
-                    co_return;
-                }
-
-                // GetTextAsync resumes on an arbitrary thread — hop to UI
-                // before touching any XAML / Window.
-                co_await wil::resume_foreground(m_dispatcherQueue);
-                if (raw.empty()) {
-                    stampTitle(L"clipboard text empty");
-                    co_return;
-                }
-
-                stampTitle(std::format(L"got {} chars", raw.size()));
-
-                // Normalize line endings to LF (matches emfe_CsWPF).
-                std::wstring text(raw);
-                std::wstring normalized;
-                normalized.reserve(text.size());
-                for (size_t k = 0; k < text.size(); ++k) {
-                    wchar_t c = text[k];
-                    if (c == L'\r') {
-                        normalized.push_back(L'\n');
-                        if (k + 1 < text.size() && text[k + 1] == L'\n') ++k;
-                    } else {
-                        normalized.push_back(c);
-                    }
-                }
-                if (normalized.empty()) {
-                    stampTitle(L"normalized empty");
-                    co_return;
-                }
 
                 // Cancel any in-flight paste; mark new one active.
                 if (m_consolePasteActive.exchange(true)) {
@@ -2192,7 +2207,7 @@ namespace winrt::emfe::implementation
                     for (int i = 0; i < 500 && m_consolePasteActive.load(); ++i) {
                         co_await winrt::resume_after(std::chrono::milliseconds(1));
                     }
-                    co_await wil::resume_foreground(m_dispatcherQueue);
+                    co_await ResumeOnDispatcher{ m_dispatcherQueue };
                     m_consolePasteCancel.store(false);
                     m_consolePasteActive.store(true);
                 }
@@ -2245,7 +2260,7 @@ namespace winrt::emfe::implementation
                         int space = m_plugin.emfe_console_tx_space(m_instance);
                         if (space <= 0) {
                             co_await winrt::resume_after(std::chrono::milliseconds(1));
-                            co_await wil::resume_foreground(m_dispatcherQueue);
+                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
                             stallMs += 1;
                             if (stallMs >= StallBreakMs) break;
                             continue;
@@ -2260,9 +2275,9 @@ namespace winrt::emfe::implementation
                         updateTitle(sent, false);
                         if (unbounded) {
                             co_await winrt::resume_after(std::chrono::milliseconds(UnboundedBurstPauseMs));
-                            co_await wil::resume_foreground(m_dispatcherQueue);
+                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
                         } else {
-                            co_await wil::resume_foreground(m_dispatcherQueue);
+                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
                         }
                     }
                 } else {
@@ -2275,14 +2290,14 @@ namespace winrt::emfe::implementation
                             count = 0;
                             updateTitle(sent, false);
                             co_await winrt::resume_after(std::chrono::milliseconds(1));
-                            co_await wil::resume_foreground(m_dispatcherQueue);
+                            co_await ResumeOnDispatcher{ m_dispatcherQueue };
                         }
                     }
                 }
 
                 updateTitle(sent, true);
                 co_await winrt::resume_after(std::chrono::milliseconds(2500));
-                co_await wil::resume_foreground(m_dispatcherQueue);
+                co_await ResumeOnDispatcher{ m_dispatcherQueue };
                 if (m_consoleWindow) {
                     try { m_consoleWindow.Title(winrt::hstring(origTitle)); } catch (...) {}
                 }
