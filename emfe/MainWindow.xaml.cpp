@@ -2130,6 +2130,7 @@ namespace winrt::emfe::implementation
                 for (int i = 0; i < 500 && m_consolePasteActive.load(); ++i) {
                     co_await winrt::resume_after(std::chrono::milliseconds(1));
                 }
+                co_await wil::resume_foreground(m_dispatcherQueue);
                 m_consolePasteCancel.store(false);
                 m_consolePasteActive.store(true);
             }
@@ -2160,6 +2161,10 @@ namespace winrt::emfe::implementation
             constexpr int UnboundedBurstPauseMs = 10;
             constexpr int StallBreakMs = 5000;
 
+            // winrt::resume_after resumes on the thread pool — any
+            // subsequent UI access (including Window::Title) would throw.
+            // Always follow each delay with a foreground hop so the whole
+            // paste loop stays on the dispatcher.
             if (haveHandshake) {
                 int stallMs = 0;
                 while (sent < total) {
@@ -2167,6 +2172,7 @@ namespace winrt::emfe::implementation
                     int space = m_plugin.emfe_console_tx_space(m_instance);
                     if (space <= 0) {
                         co_await winrt::resume_after(std::chrono::milliseconds(1));
+                        co_await wil::resume_foreground(m_dispatcherQueue);
                         stallMs += 1;
                         if (stallMs >= StallBreakMs) break;
                         continue;
@@ -2179,10 +2185,12 @@ namespace winrt::emfe::implementation
                             static_cast<char>(normalized[sent + k]));
                     sent += n;
                     updateTitle(sent, false);
-                    if (unbounded)
+                    if (unbounded) {
                         co_await winrt::resume_after(std::chrono::milliseconds(UnboundedBurstPauseMs));
-                    else
                         co_await wil::resume_foreground(m_dispatcherQueue);
+                    } else {
+                        co_await wil::resume_foreground(m_dispatcherQueue);
+                    }
                 }
             } else {
                 int count = 0;
@@ -2194,12 +2202,14 @@ namespace winrt::emfe::implementation
                         count = 0;
                         updateTitle(sent, false);
                         co_await winrt::resume_after(std::chrono::milliseconds(1));
+                        co_await wil::resume_foreground(m_dispatcherQueue);
                     }
                 }
             }
 
             updateTitle(sent, true);
             co_await winrt::resume_after(std::chrono::milliseconds(2500));
+            co_await wil::resume_foreground(m_dispatcherQueue);
             if (m_consoleWindow)
                 m_consoleWindow.Title(winrt::hstring(origTitle));
 
