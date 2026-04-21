@@ -3378,14 +3378,25 @@ namespace winrt::emfe::implementation
             else                           cpuName = L"MC68030";
         }
 
+        // Append the network mode when the selected board actually has a
+        // network interface. MVME147 has the LANCE; the Generic board has
+        // no network device, so showing "Network: …" there would mislead.
+        std::wstring netSuffix;
+        if (board == "MVME147") {
+            auto netMode = m_plugin.emfe_get_setting(m_instance, "NetworkMode");
+            if (netMode && netMode[0] != '\0') {
+                netSuffix = std::format(L" — Network: {}", winrt::to_hstring(netMode));
+            }
+        }
+
         // Prepend the plugin DLL stem (e.g. "emfe_plugin_z8000") when known.
         std::wstring text;
         if (!m_loadedPluginStem.empty()) {
-            text = std::format(L"[{}] {} / {}",
-                m_loadedPluginStem, winrt::to_hstring(board), std::wstring_view(cpuName));
+            text = std::format(L"[{}] {} / {}{}",
+                m_loadedPluginStem, winrt::to_hstring(board), std::wstring_view(cpuName), netSuffix);
         } else {
-            text = std::format(L"{} / {}",
-                winrt::to_hstring(board), std::wstring_view(cpuName));
+            text = std::format(L"{} / {}{}",
+                winrt::to_hstring(board), std::wstring_view(cpuName), netSuffix);
         }
         BoardTypeText().Text(text);
     }
