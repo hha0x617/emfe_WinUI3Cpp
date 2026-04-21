@@ -202,8 +202,9 @@
                                        Foreground="{ThemeResource ThemeDimFg}" Margin="4,0,0,0"/>
                         </StackPanel>
                         <ListView x:Name="DisasmList" Grid.Row="1"
-                                  Background="{ThemeResource ThemeWindowBg}" SelectionMode="Single"
-                                  DoubleTapped="OnDisasmDoubleTapped">
+                                  Background="{ThemeResource ThemeWindowBg}" SelectionMode="Extended"
+                                  DoubleTapped="OnDisasmDoubleTapped"
+                                  RightTapped="OnDisasmRightTapped">
                             <ListView.ItemContainerStyle>
                                 <Style TargetType="ListViewItem">
                                     <Setter Property="MinHeight" Value="0"/>
@@ -211,6 +212,26 @@
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 </Style>
                             </ListView.ItemContainerStyle>
+                            <ListView.KeyboardAccelerators>
+                                <KeyboardAccelerator Key="C" Modifiers="Control"
+                                                     Invoked="OnDisasmCopyAccel"/>
+                            </ListView.KeyboardAccelerators>
+                            <ListView.ContextFlyout>
+                                <MenuFlyout x:Name="DisasmMenuFlyout" Opening="OnDisasmMenuOpening">
+                                    <MenuFlyoutItem Text="Cancel" Click="OnDisasmMenuCancel"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem x:Name="DisasmMenuRunToHere"
+                                                    Text="Run to Here"
+                                                    Click="OnDisasmMenuRunToHere"/>
+                                    <MenuFlyoutItem x:Name="DisasmMenuSetPc"
+                                                    Text="Set PC to This Address"
+                                                    Click="OnDisasmMenuSetPc"/>
+                                    <MenuFlyoutSeparator/>
+                                    <MenuFlyoutItem x:Name="DisasmMenuCopy"
+                                                    Text="Copy Selection (Ctrl+C)"
+                                                    Click="OnDisasmMenuCopy"/>
+                                </MenuFlyout>
+                            </ListView.ContextFlyout>
                         </ListView>
                     </Grid>
                 </Border>

@@ -93,6 +93,11 @@ public:
         RESOLVE(emfe_send_char)
         RESOLVE(emfe_send_string)
         RESOLVE(emfe_release_string)
+        // Optional export: older plugin DLLs (pre-CAP_CONSOLE_TX_SPACE) don't
+        // ship it, so missing it mustn't fail the load.  Host code checks
+        // the pointer before calling.
+        emfe_console_tx_space = reinterpret_cast<decltype(::emfe_console_tx_space)*>(
+            ::GetProcAddress(m_hModule, "emfe_console_tx_space"));
 
         #undef RESOLVE
         return true;
@@ -172,6 +177,7 @@ public:
         emfe_set_data_dir = nullptr;
         emfe_send_char = nullptr;
         emfe_send_string = nullptr;
+        emfe_console_tx_space = nullptr;
         emfe_release_string = nullptr;
     }
 
@@ -246,6 +252,7 @@ public:
     decltype(::emfe_set_data_dir)*             emfe_set_data_dir = nullptr;
     decltype(::emfe_send_char)*                 emfe_send_char = nullptr;
     decltype(::emfe_send_string)*               emfe_send_string = nullptr;
+    decltype(::emfe_console_tx_space)*          emfe_console_tx_space = nullptr;
     decltype(::emfe_release_string)*            emfe_release_string = nullptr;
 
 private:

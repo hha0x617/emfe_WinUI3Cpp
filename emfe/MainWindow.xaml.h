@@ -7,6 +7,7 @@
 #include <mutex>
 #include <regex>
 #include <filesystem>
+#include <unordered_set>
 
 namespace winrt::emfe::implementation
 {
@@ -28,6 +29,14 @@ namespace winrt::emfe::implementation
         void OnMemoryGo(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void OnDisasmGo(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void OnDisasmDoubleTapped(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
+        // Disassembly context menu (Phase B mirror of emfe_CsWPF).
+        void OnDisasmRightTapped(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs const&);
+        void OnDisasmMenuOpening(Windows::Foundation::IInspectable const&, Windows::Foundation::IInspectable const&);
+        void OnDisasmMenuCancel(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmMenuRunToHere(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmMenuSetPc(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmMenuCopy(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OnDisasmCopyAccel(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&, Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const&);
         void OnToggleConsole(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void OnOpenBreakpoints(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
         void OnOpenCallStack(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -107,6 +116,20 @@ namespace winrt::emfe::implementation
 
         // Disassembly line addresses (parallel to DisasmList items)
         std::vector<uint32_t> m_disasmAddresses;
+        // Cached display text for each row so Copy can reconstruct the
+        // visible block without re-running disassembly.
+        std::vector<std::wstring> m_disasmTexts;
+        // One-shot execution breakpoints installed by "Run to Here" —
+        // removed from the plugin in the state-change callback when the
+        // CPU stops at the target address, unless a user-installed BP
+        // is already there.
+        std::unordered_set<uint32_t> m_tempBreakpoints;
+        // Row index the disassembly context menu is targeting.  Captured
+        // on RightTapped (before the flyout opens) so the Run-to-Here /
+        // Set-PC actions hit the right-clicked row even when it isn't
+        // currently selected.  -1 = nothing targeted.
+        int m_disasmMenuTargetIndex = -1;
+        void CopySelectedDisasmToClipboard();
 
         // Console window (separate Window)
         Microsoft::UI::Xaml::Window m_consoleWindow{ nullptr };
@@ -179,6 +202,17 @@ namespace winrt::emfe::implementation
         Microsoft::UI::Dispatching::DispatcherQueueTimer m_consoleRenderTimer{nullptr};
         void EnsureConsoleWindow();
         void AppendConsoleChar(char ch);
+
+        // Console context menu: Copy / Paste / Select All.  Paste uses
+        // emfe_console_tx_space (when the plugin exports it) to throttle
+        // clipboard text at exactly the rate the guest UART drains.
+        void SetupConsoleContextMenu();
+        void DoConsoleCopy();
+        void DoConsolePaste();
+        void DoConsoleSelectAll();
+        std::atomic<bool> m_consolePasteCancel{false};
+        std::atomic<bool> m_consolePasteActive{false};
+        std::wstring m_consoleTitleOrig;  // restored after paste reports finish
 
         // Console search state
         bool m_consoleSearchMode = false;

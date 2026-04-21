@@ -38,6 +38,7 @@
 #include <winrt/Microsoft.UI.Xaml.Shapes.h>
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Microsoft.UI.Xaml.XamlTypeInfo.h>
 #include <wil/cppwinrt_helpers.h>
 #include <commdlg.h>

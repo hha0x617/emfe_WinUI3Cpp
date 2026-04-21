@@ -175,6 +175,26 @@
       <TargetPath>plugins\%(Filename)%(Extension)</TargetPath>
     </Content>
   </ItemGroup>
+  <!-- Generate GitVersion.h with git commit hash and app version.
+       Mirrored from em68030_WinUI3Cpp so the main window title can surface
+       the short commit hash (critical for telling which build is running). -->
+  <Target Name="GenerateGitVersion" BeforeTargets="ClCompile">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitHash" />
+    </Exec>
+    <Exec Command="git describe --tags --abbrev=0" ConsoleToMSBuild="true" StandardOutputImportance="low" IgnoreExitCode="true"
+          Condition="'$(AppVersion)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitDescribeTag" />
+    </Exec>
+    <PropertyGroup>
+      <GitCommitHash Condition="'$(GitCommitHash)' == ''">unknown</GitCommitHash>
+      <AppVersion Condition="'$(AppVersion)' == '' and '$(GitDescribeTag)' != '' and $(GitDescribeTag.StartsWith('v'))">$(GitDescribeTag.Substring(1))</AppVersion>
+      <AppVersion Condition="'$(AppVersion)' == ''">0.0.0</AppVersion>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(IntDir)GitVersion.h"
+                     Lines="#pragma once%0D%0A#define GIT_COMMIT_HASH &quot;$(GitCommitHash)&quot;%0D%0A#define APP_VERSION &quot;$(AppVersion)&quot;"
+                     Overwrite="true" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

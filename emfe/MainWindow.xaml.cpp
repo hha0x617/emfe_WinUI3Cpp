@@ -16,6 +16,7 @@
 #include <format>
 #include <filesystem>
 #include <fstream>
+#include "GitVersion.h"
 
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
@@ -34,7 +35,11 @@ namespace winrt::emfe::implementation
     MainWindow::MainWindow()
     {
         InitializeComponent();
-        Title(L"emfe - Emulator Frontend");
+        {
+            std::string hash = GIT_COMMIT_HASH;
+            std::wstring whash(hash.begin(), hash.end());
+            Title(winrt::hstring(L"emfe - Emulator Frontend [" + whash + L"]"));
+        }
         AppWindow().Resize({ 1100, 750 });
 
         // Close child windows and destroy plugin instance on main window close
@@ -324,6 +329,22 @@ namespace winrt::emfe::implementation
                     self->m_lastStopReason = reason;
                     self->m_lastStopAddress = static_cast<uint32_t>(addr);
                     if (state != EMFE_STATE_RUNNING) {
+                        // Remove one-shot breakpoints installed by "Run to
+                        // Here" when we stop on them; leave genuine user
+                        // breakpoints alone.
+                        if (reason == EMFE_STOP_REASON_BREAKPOINT) {
+                            uint32_t stopAt = static_cast<uint32_t>(addr);
+                            auto it = self->m_tempBreakpoints.find(stopAt);
+                            if (it != self->m_tempBreakpoints.end()) {
+                                self->m_tempBreakpoints.erase(it);
+                                if (self->m_breakpointAddresses.find(stopAt)
+                                        == self->m_breakpointAddresses.end())
+                                {
+                                    self->m_plugin.emfe_remove_breakpoint(
+                                        self->m_instance, stopAt);
+                                }
+                            }
+                        }
                         self->UpdateRegisters();
                         self->UpdateDisassembly();
                         self->UpdateMemoryDump(self->m_memoryAddress);
@@ -799,6 +820,7 @@ namespace winrt::emfe::implementation
 
         auto items = winrt::single_threaded_observable_vector<Windows::Foundation::IInspectable>();
         m_disasmAddresses.clear();
+        m_disasmTexts.clear();
         int pcIndex = -1;
 
         auto brYellow = GetThemeBrush(L"ThemeHighlightedFg");
@@ -839,6 +861,7 @@ namespace winrt::emfe::implementation
                 winrt::to_hstring(line.raw_bytes ? line.raw_bytes : ""),
                 winrt::to_hstring(line.mnemonic ? line.mnemonic : ""),
                 winrt::to_hstring(line.operands ? line.operands : ""));
+            m_disasmTexts.push_back(text);
 
             auto mainText = TextBlock();
             mainText.FontFamily(consolasFont);
@@ -893,6 +916,138 @@ namespace winrt::emfe::implementation
         int idx = DisasmList().SelectedIndex();
         if (idx >= 0 && idx < static_cast<int>(m_disasmAddresses.size()))
             ToggleBreakpoint(m_disasmAddresses[idx]);
+    }
+
+    // ------------------------------------------------------------------------
+    // Disassembly context menu (Phase B mirror of emfe_CsWPF)
+    // ------------------------------------------------------------------------
+
+    void MainWindow::OnDisasmRightTapped(Windows::Foundation::IInspectable const& sender,
+                                          Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs const& e)
+    {
+        // Capture the row index the user actually right-clicked, rather
+        // than relying on SelectedIndex — WinUI's ListView doesn't move
+        // selection on right-click by default.
+        m_disasmMenuTargetIndex = -1;
+        auto origEl = e.OriginalSource().try_as<Microsoft::UI::Xaml::DependencyObject>();
+        while (origEl) {
+            if (auto item = origEl.try_as<Microsoft::UI::Xaml::Controls::ListViewItem>()) {
+                auto container = DisasmList().ContainerFromItem(item.Content());
+                if (!container) container = item;
+                m_disasmMenuTargetIndex = DisasmList().IndexFromContainer(container);
+                break;
+            }
+            origEl = Microsoft::UI::Xaml::Media::VisualTreeHelper::GetParent(origEl);
+        }
+        if (m_disasmMenuTargetIndex < 0)
+            m_disasmMenuTargetIndex = DisasmList().SelectedIndex();
+
+        // Let the default ContextFlyout handling open the menu at the click
+        // position; we only pre-compute the target index here.
+        (void)sender;
+    }
+
+    void MainWindow::OnDisasmMenuOpening(Windows::Foundation::IInspectable const&,
+                                          Windows::Foundation::IInspectable const&)
+    {
+        bool haveTarget = m_disasmMenuTargetIndex >= 0
+                          && m_disasmMenuTargetIndex < static_cast<int>(m_disasmAddresses.size());
+        bool haveInstance = (m_instance != nullptr);
+        DisasmMenuRunToHere().IsEnabled(haveTarget && haveInstance);
+        DisasmMenuSetPc().IsEnabled(haveTarget && haveInstance);
+        DisasmMenuCopy().IsEnabled(DisasmList().SelectedItems().Size() > 0);
+    }
+
+    void MainWindow::OnDisasmMenuCancel(Windows::Foundation::IInspectable const&,
+                                         Microsoft::UI::Xaml::RoutedEventArgs const&)
+    {
+        // No-op — right-click / Escape already dismisses the menu.  Kept as a
+        // visible entry at the user's request for parity with emfe_CsWPF.
+    }
+
+    void MainWindow::OnDisasmMenuRunToHere(Windows::Foundation::IInspectable const&,
+                                            Microsoft::UI::Xaml::RoutedEventArgs const&)
+    {
+        if (!m_instance) return;
+        if (m_disasmMenuTargetIndex < 0
+                || m_disasmMenuTargetIndex >= static_cast<int>(m_disasmAddresses.size()))
+            return;
+        uint32_t addr = m_disasmAddresses[m_disasmMenuTargetIndex];
+
+        if (m_breakpointAddresses.find(addr) == m_breakpointAddresses.end()) {
+            if (m_plugin.emfe_add_breakpoint(m_instance, addr) != EMFE_OK) {
+                SetStatus(std::format(L"Failed to add temporary breakpoint at ${:08X}", addr));
+                return;
+            }
+            m_tempBreakpoints.insert(addr);
+        }
+        m_plugin.emfe_run(m_instance);
+        UpdateToolbarState();
+        SetStatus(std::format(L"Running to ${:08X}...", addr));
+    }
+
+    void MainWindow::OnDisasmMenuSetPc(Windows::Foundation::IInspectable const&,
+                                        Microsoft::UI::Xaml::RoutedEventArgs const&)
+    {
+        if (!m_instance) return;
+        if (m_disasmMenuTargetIndex < 0
+                || m_disasmMenuTargetIndex >= static_cast<int>(m_disasmAddresses.size()))
+            return;
+        uint32_t addr = m_disasmAddresses[m_disasmMenuTargetIndex];
+        EmfeRegValue v{};
+        v.reg_id = m_pcRegId;
+        v.value.u64 = addr;
+        if (m_plugin.emfe_set_registers(m_instance, &v, 1) != EMFE_OK) {
+            SetStatus(std::format(L"Failed to set PC to ${:08X}", addr));
+            return;
+        }
+        UpdateRegisters();
+        UpdateDisassembly();
+        UpdateMemoryDump(m_memoryAddress);
+        SetStatus(std::format(L"PC set to ${:08X}", addr));
+    }
+
+    void MainWindow::OnDisasmMenuCopy(Windows::Foundation::IInspectable const&,
+                                       Microsoft::UI::Xaml::RoutedEventArgs const&)
+    {
+        CopySelectedDisasmToClipboard();
+    }
+
+    void MainWindow::OnDisasmCopyAccel(Microsoft::UI::Xaml::Input::KeyboardAccelerator const&,
+                                        Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& e)
+    {
+        CopySelectedDisasmToClipboard();
+        e.Handled(true);
+    }
+
+    void MainWindow::CopySelectedDisasmToClipboard()
+    {
+        auto selected = DisasmList().SelectedItems();
+        if (selected.Size() == 0) return;
+
+        // Walk items in visual (top-to-bottom) order so the pasted block
+        // reads naturally regardless of click order.
+        auto src = DisasmList().Items();
+        std::wstring out;
+        int copied = 0;
+        for (uint32_t i = 0; i < src.Size(); ++i) {
+            bool isSel = false;
+            auto item = src.GetAt(i);
+            for (uint32_t j = 0; j < selected.Size(); ++j) {
+                if (selected.GetAt(j) == item) { isSel = true; break; }
+            }
+            if (!isSel) continue;
+            if (i >= m_disasmTexts.size()) continue;
+            if (!out.empty()) out += L"\r\n";
+            out += m_disasmTexts[i];
+            ++copied;
+        }
+        if (out.empty()) return;
+
+        Windows::ApplicationModel::DataTransfer::DataPackage dp;
+        dp.SetText(winrt::hstring(out));
+        Windows::ApplicationModel::DataTransfer::Clipboard::SetContent(dp);
+        SetStatus(std::format(L"Copied {} line(s) to clipboard", copied));
     }
 
     // ========================================================================
@@ -1587,6 +1742,7 @@ namespace winrt::emfe::implementation
         m_consoleTextBox.BorderThickness({ 0, 0, 0, 0 });
         m_consoleTextBox.Padding({ 4, 4, 4, 4 });
         ScrollViewer::SetHorizontalScrollBarVisibility(m_consoleTextBox, ScrollBarVisibility::Disabled);
+        SetupConsoleContextMenu();
 
         // Override theme resources to prevent color changes on PointerOver/Focused
         auto res = m_consoleTextBox.Resources();
@@ -1874,6 +2030,183 @@ namespace winrt::emfe::implementation
             }
             ApplyThemeToWindow(m_consoleWindow, isDark);
         }
+    }
+
+    void MainWindow::SetupConsoleContextMenu()
+    {
+        if (!m_consoleTextBox) return;
+
+        auto flyout = Controls::MenuFlyout();
+
+        auto itemCopy = Controls::MenuFlyoutItem();
+        itemCopy.Text(L"Copy (Ctrl+C)");
+        itemCopy.Click([this](auto&&, auto&&) { DoConsoleCopy(); });
+        flyout.Items().Append(itemCopy);
+
+        auto itemPaste = Controls::MenuFlyoutItem();
+        itemPaste.Text(L"Paste");
+        itemPaste.Click([this](auto&&, auto&&) { DoConsolePaste(); });
+        flyout.Items().Append(itemPaste);
+
+        flyout.Items().Append(Controls::MenuFlyoutSeparator());
+
+        auto itemSelectAll = Controls::MenuFlyoutItem();
+        itemSelectAll.Text(L"Select All (Ctrl+A)");
+        itemSelectAll.Click([this](auto&&, auto&&) { DoConsoleSelectAll(); });
+        flyout.Items().Append(itemSelectAll);
+
+        m_consoleTextBox.ContextFlyout(flyout);
+    }
+
+    void MainWindow::DoConsoleCopy()
+    {
+        if (!m_consoleTextBox) return;
+        auto selected = std::wstring(m_consoleTextBox.SelectedText());
+        if (selected.empty())
+            selected = std::wstring(m_consoleTextBox.Text());
+        if (selected.empty()) return;
+
+        Windows::ApplicationModel::DataTransfer::DataPackage dp;
+        dp.SetText(winrt::hstring(selected));
+        Windows::ApplicationModel::DataTransfer::Clipboard::SetContent(dp);
+    }
+
+    void MainWindow::DoConsoleSelectAll()
+    {
+        if (m_consoleTextBox)
+            m_consoleTextBox.SelectAll();
+    }
+
+    // Paste implementation mirrors emfe_CsWPF's PasteWithHandshake:
+    //   - If the plugin exports emfe_console_tx_space (bounded UARTs like
+    //     Uart16550 return exact RX-FIFO headroom; unbounded like Z8530
+    //     return INT32_MAX), throttle to that headroom plus a 10 ms pause
+    //     between unbounded bursts so the guest kernel's line-discipline
+    //     buffer has room to drain (NetBSD reports "zstty: ibuf flood"
+    //     otherwise).
+    //   - Without the export, fall back to a 64-char / 1 ms burst.
+    //   - CR / CRLF normalized to LF.
+    //
+    // Progress surfaces through the console window title so the user can
+    // see whether the host sent everything or whether backpressure stalled.
+    void MainWindow::DoConsolePaste()
+    {
+        if (!m_instance || !m_plugin.IsLoaded()) return;
+
+        // Retrieve clipboard text on the UI thread (await here is allowed
+        // because winrt::fire_and_forget resumes back on the dispatcher).
+        auto pasteOp = [this]() -> winrt::fire_and_forget {
+            auto dp = Windows::ApplicationModel::DataTransfer::Clipboard::GetContent();
+            if (!dp.Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::Text()))
+                co_return;
+            winrt::hstring raw;
+            try {
+                raw = co_await dp.GetTextAsync();
+            } catch (...) {
+                co_return;
+            }
+            if (raw.empty()) co_return;
+
+            // Normalize line endings to LF (matches emfe_CsWPF convention).
+            std::wstring text(raw);
+            std::wstring normalized;
+            normalized.reserve(text.size());
+            for (size_t k = 0; k < text.size(); ++k) {
+                wchar_t c = text[k];
+                if (c == L'\r') {
+                    normalized.push_back(L'\n');
+                    if (k + 1 < text.size() && text[k + 1] == L'\n') ++k;
+                } else {
+                    normalized.push_back(c);
+                }
+            }
+            if (normalized.empty()) co_return;
+
+            // Cancel any in-flight paste; mark new one active.
+            if (m_consolePasteActive.exchange(true)) {
+                m_consolePasteCancel.store(true);
+                // Tight wait loop: hand the scheduler 1 ms ticks until
+                // the previous paste observes the cancel and drops.
+                for (int i = 0; i < 500 && m_consolePasteActive.load(); ++i) {
+                    co_await winrt::resume_after(std::chrono::milliseconds(1));
+                }
+                m_consolePasteCancel.store(false);
+                m_consolePasteActive.store(true);
+            }
+
+            auto origTitle = m_consoleWindow ? std::wstring(m_consoleWindow.Title()) : std::wstring{};
+            m_consoleTitleOrig = origTitle;
+            int total = static_cast<int>(normalized.size());
+            int sent = 0;
+
+            // Probe backpressure once; stick with the chosen mode for the
+            // whole paste so the title label stays coherent.
+            int probe = -1;
+            if (m_plugin.emfe_console_tx_space)
+                probe = m_plugin.emfe_console_tx_space(m_instance);
+            bool haveHandshake = probe >= 0;
+            std::wstring mode = haveHandshake ? L"handshake" : L"burst";
+
+            auto updateTitle = [this, &origTitle, total, &mode](int s, bool finished) {
+                if (!m_consoleWindow) return;
+                m_consoleWindow.Title(winrt::hstring(std::format(
+                    L"{} {}/{} via {} — {}",
+                    finished ? L"Pasted" : L"Pasting",
+                    s, total, mode, origTitle)));
+            };
+
+            constexpr int Chunk = 64;
+            constexpr int UnboundedThreshold = 1024;
+            constexpr int UnboundedBurstPauseMs = 10;
+            constexpr int StallBreakMs = 5000;
+
+            if (haveHandshake) {
+                int stallMs = 0;
+                while (sent < total) {
+                    if (m_consolePasteCancel.load()) break;
+                    int space = m_plugin.emfe_console_tx_space(m_instance);
+                    if (space <= 0) {
+                        co_await winrt::resume_after(std::chrono::milliseconds(1));
+                        stallMs += 1;
+                        if (stallMs >= StallBreakMs) break;
+                        continue;
+                    }
+                    stallMs = 0;
+                    bool unbounded = space >= UnboundedThreshold;
+                    int n = (std::min)((std::min)(space, Chunk), total - sent);
+                    for (int k = 0; k < n; ++k)
+                        m_plugin.emfe_send_char(m_instance,
+                            static_cast<char>(normalized[sent + k]));
+                    sent += n;
+                    updateTitle(sent, false);
+                    if (unbounded)
+                        co_await winrt::resume_after(std::chrono::milliseconds(UnboundedBurstPauseMs));
+                    else
+                        co_await wil::resume_foreground(m_dispatcherQueue);
+                }
+            } else {
+                int count = 0;
+                while (sent < total) {
+                    if (m_consolePasteCancel.load()) break;
+                    m_plugin.emfe_send_char(m_instance,
+                        static_cast<char>(normalized[sent++]));
+                    if (++count >= Chunk) {
+                        count = 0;
+                        updateTitle(sent, false);
+                        co_await winrt::resume_after(std::chrono::milliseconds(1));
+                    }
+                }
+            }
+
+            updateTitle(sent, true);
+            co_await winrt::resume_after(std::chrono::milliseconds(2500));
+            if (m_consoleWindow)
+                m_consoleWindow.Title(winrt::hstring(origTitle));
+
+            m_consolePasteActive.store(false);
+            m_consolePasteCancel.store(false);
+        };
+        pasteOp();
     }
 
     void MainWindow::AppendConsoleChar(char ch)
