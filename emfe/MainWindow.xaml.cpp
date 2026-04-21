@@ -87,6 +87,7 @@ namespace winrt::emfe::implementation
                 m_consoleWindow = nullptr;
                 m_consoleTextBox = nullptr;
             }
+            if (m_statsTimer) { m_statsTimer.Stop(); m_statsTimer = nullptr; }
             if (m_instance && m_plugin.IsLoaded()) {
                 m_plugin.emfe_stop(m_instance);
                 m_plugin.emfe_destroy(m_instance);
@@ -96,6 +97,47 @@ namespace winrt::emfe::implementation
 
         m_dispatcherQueue = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
         LoadPlugin();
+        StartStatsTimer();
+    }
+
+    void MainWindow::StartStatsTimer()
+    {
+        if (m_statsTimer) return;
+        m_statsTimer = DispatcherQueue().CreateTimer();
+        m_statsTimer.Interval(std::chrono::milliseconds(500));
+        m_statsTimer.Tick([this](auto&&, auto&&) { UpdateStatsDisplay(); });
+        m_statsTimer.Start();
+    }
+
+    void MainWindow::UpdateStatsDisplay()
+    {
+        if (!m_instance || !m_plugin.IsLoaded() || !CyclesText()) return;
+
+        // Only refresh while the emulator is actually executing. UpdateRegisters()
+        // already repaints the toolbar on stop / step / breakpoint via the state
+        // change callback, so we'd only trample those labels on an idle tick.
+        auto state = m_plugin.emfe_get_state(m_instance);
+        if (state != EMFE_STATE_RUNNING) return;
+
+        int64_t cycles = m_plugin.emfe_get_cycle_count(m_instance);
+        int64_t instrs = m_plugin.emfe_get_instruction_count(m_instance);
+        auto now = std::chrono::steady_clock::now();
+
+        // First tick after Run starts has no baseline — just show totals.
+        double seconds = std::chrono::duration<double>(now - m_statsLastInstant).count();
+        if (m_statsLastInstant.time_since_epoch().count() == 0 || seconds < 0.001) {
+            CyclesText().Text(winrt::hstring(std::format(
+                L"Cycles: {}  Instrs: {}", cycles, instrs)));
+        } else {
+            double mhz = static_cast<double>(cycles - m_statsLastCycles) / seconds / 1'000'000.0;
+            double mips = static_cast<double>(instrs - m_statsLastInstrs) / seconds / 1'000'000.0;
+            CyclesText().Text(winrt::hstring(std::format(
+                L"Cycles: {}  Instrs: {}  {:.2f} MHz ({:.2f} MIPS)",
+                cycles, instrs, mhz, mips)));
+        }
+        m_statsLastInstant = now;
+        m_statsLastCycles = cycles;
+        m_statsLastInstrs = instrs;
     }
 
     // ========================================================================
@@ -348,6 +390,12 @@ namespace winrt::emfe::implementation
                 self->m_dispatcherQueue.TryEnqueue([self, state, reason, addr]() {
                     self->m_lastStopReason = reason;
                     self->m_lastStopAddress = static_cast<uint32_t>(addr);
+                    if (state == EMFE_STATE_RUNNING) {
+                        // Discard the previous interval's cycle/instr snapshot so
+                        // the first MHz/MIPS sample after resume measures only the
+                        // new run (otherwise the stopped interval gets averaged in).
+                        self->m_statsLastInstant = {};
+                    }
                     if (state != EMFE_STATE_RUNNING) {
                         // Remove one-shot breakpoints installed by "Run to
                         // Here" when we stop on them; leave genuine user

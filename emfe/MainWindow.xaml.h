@@ -203,6 +203,17 @@ namespace winrt::emfe::implementation
         void EnsureConsoleWindow();
         void AppendConsoleChar(char ch);
 
+        // Periodic MHz/MIPS update while the emulator is running, modeled
+        // after em68030_WinUI3Cpp's MainViewModel: every ~500ms sample
+        // cycle/instruction counters, compute rate over the interval, and
+        // refresh the toolbar text on the UI thread.
+        Microsoft::UI::Dispatching::DispatcherQueueTimer m_statsTimer{nullptr};
+        std::chrono::steady_clock::time_point m_statsLastInstant{};
+        int64_t m_statsLastCycles = 0;
+        int64_t m_statsLastInstrs = 0;
+        void StartStatsTimer();
+        void UpdateStatsDisplay();
+
         // Console context menu: Copy / Paste / Select All.  Paste uses
         // emfe_console_tx_space (when the plugin exports it) to throttle
         // clipboard text at exactly the rate the guest UART drains.
