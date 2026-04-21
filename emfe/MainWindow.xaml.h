@@ -206,13 +206,27 @@ namespace winrt::emfe::implementation
         // Periodic MHz/MIPS update while the emulator is running, modeled
         // after em68030_WinUI3Cpp's MainViewModel: every ~500ms sample
         // cycle/instruction counters, compute rate over the interval, and
-        // refresh the toolbar text on the UI thread.
+        // refresh the toolbar text on the UI thread. The text is clickable
+        // and cycles through three views so all three fit in the toolbar:
+        //   0 = Cycles / Instrs
+        //   1 = MHz / MIPS (instantaneous over the last 500 ms)
+        //   2 = avg MHz / MIPS (since the current Run started)
         Microsoft::UI::Dispatching::DispatcherQueueTimer m_statsTimer{nullptr};
         std::chrono::steady_clock::time_point m_statsLastInstant{};
         int64_t m_statsLastCycles = 0;
         int64_t m_statsLastInstrs = 0;
+        std::chrono::steady_clock::time_point m_runStartInstant{};
+        int64_t m_runStartCycles = 0;
+        int64_t m_runStartInstrs = 0;
+        double m_instMhz = 0;
+        double m_instMips = 0;
+        double m_avgMhz = 0;
+        double m_avgMips = 0;
+        int m_statsViewMode = 0;
         void StartStatsTimer();
         void UpdateStatsDisplay();
+        void OnCyclesTextTapped(Windows::Foundation::IInspectable const&,
+                                 Microsoft::UI::Xaml::Input::TappedRoutedEventArgs const&);
 
         // Console context menu: Copy / Paste / Select All.  Paste uses
         // emfe_console_tx_space (when the plugin exports it) to throttle

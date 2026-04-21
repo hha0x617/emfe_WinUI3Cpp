@@ -107,37 +107,69 @@ namespace winrt::emfe::implementation
         m_statsTimer.Interval(std::chrono::milliseconds(500));
         m_statsTimer.Tick([this](auto&&, auto&&) { UpdateStatsDisplay(); });
         m_statsTimer.Start();
+
+        // Cycle through the three views on click. The TextBlock isn't
+        // hit-test-opaque by default — FindName'd handler still fires via
+        // bubbling on the surrounding StackPanel cell.
+        if (CyclesText()) {
+            CyclesText().Tapped({ this, &MainWindow::OnCyclesTextTapped });
+        }
+    }
+
+    void MainWindow::OnCyclesTextTapped(
+        Windows::Foundation::IInspectable const&,
+        Microsoft::UI::Xaml::Input::TappedRoutedEventArgs const&)
+    {
+        m_statsViewMode = (m_statsViewMode + 1) % 3;
+        UpdateStatsDisplay();  // repaint immediately without waiting for the next tick
     }
 
     void MainWindow::UpdateStatsDisplay()
     {
         if (!m_instance || !m_plugin.IsLoaded() || !CyclesText()) return;
 
-        // Only refresh while the emulator is actually executing. UpdateRegisters()
-        // already repaints the toolbar on stop / step / breakpoint via the state
-        // change callback, so we'd only trample those labels on an idle tick.
+        // UpdateRegisters() already repaints the toolbar on stop/step/breakpoint
+        // via the state change callback. Keep the last running-state numbers
+        // visible when stopped — recomputing the delta against a stale snapshot
+        // would print nonsense MHz values.
         auto state = m_plugin.emfe_get_state(m_instance);
-        if (state != EMFE_STATE_RUNNING) return;
+        bool running = (state == EMFE_STATE_RUNNING);
 
         int64_t cycles = m_plugin.emfe_get_cycle_count(m_instance);
         int64_t instrs = m_plugin.emfe_get_instruction_count(m_instance);
         auto now = std::chrono::steady_clock::now();
 
-        // First tick after Run starts has no baseline — just show totals.
-        double seconds = std::chrono::duration<double>(now - m_statsLastInstant).count();
-        if (m_statsLastInstant.time_since_epoch().count() == 0 || seconds < 0.001) {
-            CyclesText().Text(winrt::hstring(std::format(
-                L"Cycles: {}  Instrs: {}", cycles, instrs)));
-        } else {
-            double mhz = static_cast<double>(cycles - m_statsLastCycles) / seconds / 1'000'000.0;
-            double mips = static_cast<double>(instrs - m_statsLastInstrs) / seconds / 1'000'000.0;
-            CyclesText().Text(winrt::hstring(std::format(
-                L"Cycles: {}  Instrs: {}  {:.2f} MHz ({:.2f} MIPS)",
-                cycles, instrs, mhz, mips)));
+        if (running) {
+            double seconds = std::chrono::duration<double>(now - m_statsLastInstant).count();
+            if (m_statsLastInstant.time_since_epoch().count() != 0 && seconds >= 0.001) {
+                m_instMhz = static_cast<double>(cycles - m_statsLastCycles) / seconds / 1'000'000.0;
+                m_instMips = static_cast<double>(instrs - m_statsLastInstrs) / seconds / 1'000'000.0;
+            }
+
+            double runSec = std::chrono::duration<double>(now - m_runStartInstant).count();
+            if (m_runStartInstant.time_since_epoch().count() != 0 && runSec >= 0.01) {
+                m_avgMhz = static_cast<double>(cycles - m_runStartCycles) / runSec / 1'000'000.0;
+                m_avgMips = static_cast<double>(instrs - m_runStartInstrs) / runSec / 1'000'000.0;
+            }
+
+            m_statsLastInstant = now;
+            m_statsLastCycles = cycles;
+            m_statsLastInstrs = instrs;
         }
-        m_statsLastInstant = now;
-        m_statsLastCycles = cycles;
-        m_statsLastInstrs = instrs;
+
+        std::wstring text;
+        switch (m_statsViewMode) {
+            case 0:
+                text = std::format(L"Cycles: {}  Instrs: {}", cycles, instrs);
+                break;
+            case 1:
+                text = std::format(L"{:.2f} MHz ({:.2f} MIPS)", m_instMhz, m_instMips);
+                break;
+            case 2:
+                text = std::format(L"avg {:.2f} MHz ({:.2f} MIPS)", m_avgMhz, m_avgMips);
+                break;
+        }
+        CyclesText().Text(winrt::hstring(text));
     }
 
     // ========================================================================
@@ -391,10 +423,19 @@ namespace winrt::emfe::implementation
                     self->m_lastStopReason = reason;
                     self->m_lastStopAddress = static_cast<uint32_t>(addr);
                     if (state == EMFE_STATE_RUNNING) {
-                        // Discard the previous interval's cycle/instr snapshot so
-                        // the first MHz/MIPS sample after resume measures only the
-                        // new run (otherwise the stopped interval gets averaged in).
+                        // Reset both the per-interval snapshot (used for the
+                        // "X.XX MHz (Y.YY MIPS)" rate) and the run-start
+                        // baseline (used for the "avg ..." view). Without this,
+                        // after a Stop+Run the first samples would average
+                        // through the stopped interval and produce nonsense.
                         self->m_statsLastInstant = {};
+                        if (self->m_instance && self->m_plugin.IsLoaded()) {
+                            self->m_runStartInstant = std::chrono::steady_clock::now();
+                            self->m_runStartCycles = self->m_plugin.emfe_get_cycle_count(self->m_instance);
+                            self->m_runStartInstrs = self->m_plugin.emfe_get_instruction_count(self->m_instance);
+                            self->m_instMhz = self->m_instMips = 0;
+                            self->m_avgMhz = self->m_avgMips = 0;
+                        }
                     }
                     if (state != EMFE_STATE_RUNNING) {
                         // Remove one-shot breakpoints installed by "Run to
