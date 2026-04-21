@@ -422,21 +422,11 @@ namespace winrt::emfe::implementation
                 self->m_dispatcherQueue.TryEnqueue([self, state, reason, addr]() {
                     self->m_lastStopReason = reason;
                     self->m_lastStopAddress = static_cast<uint32_t>(addr);
-                    if (state == EMFE_STATE_RUNNING) {
-                        // Reset both the per-interval snapshot (used for the
-                        // "X.XX MHz (Y.YY MIPS)" rate) and the run-start
-                        // baseline (used for the "avg ..." view). Without this,
-                        // after a Stop+Run the first samples would average
-                        // through the stopped interval and produce nonsense.
-                        self->m_statsLastInstant = {};
-                        if (self->m_instance && self->m_plugin.IsLoaded()) {
-                            self->m_runStartInstant = std::chrono::steady_clock::now();
-                            self->m_runStartCycles = self->m_plugin.emfe_get_cycle_count(self->m_instance);
-                            self->m_runStartInstrs = self->m_plugin.emfe_get_instruction_count(self->m_instance);
-                            self->m_instMhz = self->m_instMips = 0;
-                            self->m_avgMhz = self->m_avgMips = 0;
-                        }
-                    }
+                    // The plugin ABI only fires this callback on stop/halt,
+                    // never on transitions to RUNNING — so the run-start
+                    // baseline reset has to be driven from the frontend at
+                    // the call site (see ResetRunStatsBaseline, called from
+                    // OnRun / OnDisasmMenuRunToHere).
                     if (state != EMFE_STATE_RUNNING) {
                         // Remove one-shot breakpoints installed by "Run to
                         // Here" when we stop on them; leave genuine user
@@ -1090,6 +1080,7 @@ namespace winrt::emfe::implementation
             }
             m_tempBreakpoints.insert(addr);
         }
+        ResetRunStatsBaseline();
         m_plugin.emfe_run(m_instance);
         UpdateToolbarState();
         SetStatus(std::format(L"Running to ${:08X}...", addr));
@@ -1514,9 +1505,21 @@ namespace winrt::emfe::implementation
         UpdateToolbarState();
     }
 
+    void MainWindow::ResetRunStatsBaseline()
+    {
+        if (!m_instance || !m_plugin.IsLoaded()) return;
+        m_statsLastInstant = {};
+        m_runStartInstant = std::chrono::steady_clock::now();
+        m_runStartCycles = m_plugin.emfe_get_cycle_count(m_instance);
+        m_runStartInstrs = m_plugin.emfe_get_instruction_count(m_instance);
+        m_instMhz = m_instMips = 0;
+        m_avgMhz = m_avgMips = 0;
+    }
+
     void MainWindow::OnRun(Windows::Foundation::IInspectable const&, RoutedEventArgs const&)
     {
         if (!m_instance) return;
+        ResetRunStatsBaseline();
         m_plugin.emfe_run(m_instance);
         UpdateToolbarState();
         SetStatus(L"Running...");

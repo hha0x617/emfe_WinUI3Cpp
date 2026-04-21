@@ -225,6 +225,7 @@ namespace winrt::emfe::implementation
         int m_statsViewMode = 0;
         void StartStatsTimer();
         void UpdateStatsDisplay();
+        void ResetRunStatsBaseline();  // snapshot counters at Run start for the avg view
         void OnCyclesTextTapped(Windows::Foundation::IInspectable const&,
                                  Microsoft::UI::Xaml::Input::TappedRoutedEventArgs const&);
 
