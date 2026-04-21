@@ -2093,19 +2093,49 @@ namespace winrt::emfe::implementation
     {
         if (!m_instance || !m_plugin.IsLoaded()) return;
 
+        // Immediate title feedback so the user can tell the click landed
+        // even if the async clipboard read trips up.
+        auto stampTitle = [this](std::wstring_view stage) {
+            if (m_consoleWindow)
+                m_consoleWindow.Title(winrt::hstring(std::format(
+                    L"Paste: {} — {}", stage,
+                    m_consoleTitleOrig.empty()
+                        ? std::wstring(m_consoleWindow.Title())
+                        : m_consoleTitleOrig)));
+        };
+        stampTitle(L"starting");
+
         // Retrieve clipboard text on the UI thread (await here is allowed
         // because winrt::fire_and_forget resumes back on the dispatcher).
-        auto pasteOp = [this]() -> winrt::fire_and_forget {
-            auto dp = Windows::ApplicationModel::DataTransfer::Clipboard::GetContent();
-            if (!dp.Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::Text()))
+        auto pasteOp = [this, stampTitle]() -> winrt::fire_and_forget {
+            Windows::ApplicationModel::DataTransfer::DataPackageView dp{ nullptr };
+            try {
+                dp = Windows::ApplicationModel::DataTransfer::Clipboard::GetContent();
+            } catch (winrt::hresult_error const& e) {
+                stampTitle(std::format(L"clipboard error hr={:#010x}",
+                    static_cast<uint32_t>(e.code().value)));
                 co_return;
+            }
+            if (!dp || !dp.Contains(Windows::ApplicationModel::DataTransfer::StandardDataFormats::Text())) {
+                stampTitle(L"clipboard has no text");
+                co_return;
+            }
             winrt::hstring raw;
             try {
                 raw = co_await dp.GetTextAsync();
+            } catch (winrt::hresult_error const& e) {
+                stampTitle(std::format(L"GetTextAsync failed hr={:#010x}",
+                    static_cast<uint32_t>(e.code().value)));
+                co_return;
             } catch (...) {
+                stampTitle(L"GetTextAsync unknown exception");
                 co_return;
             }
-            if (raw.empty()) co_return;
+            co_await wil::resume_foreground(m_dispatcherQueue);
+            if (raw.empty()) {
+                stampTitle(L"clipboard text empty");
+                co_return;
+            }
 
             // Normalize line endings to LF (matches emfe_CsWPF convention).
             std::wstring text(raw);
