@@ -67,6 +67,14 @@ namespace winrt::emfe::implementation
         void UpdateToolbarState();
         void SetStatus(const std::wstring& text);
 
+        // Replace a TextBox's default ContextFlyout / SelectionFlyout with
+        // an English Cut/Copy/Paste/Select All menu. WinUI 3's built-in text
+        // flyouts come localized in the OS UI language (so Japanese users
+        // see 元に戻す / 切り取り / 貼り付け), and they also occasionally
+        // render with the wrong theme colors. emfe's UI is English-only
+        // (see feedback_emfe_ui_english_only), so we install our own.
+        void AttachEnglishTextFlyout(Microsoft::UI::Xaml::Controls::TextBox const& tb);
+
         // Helper: add a register row (label + textbox) to a StackPanel
         Microsoft::UI::Xaml::Controls::TextBox AddRegRow(
             Microsoft::UI::Xaml::Controls::StackPanel const& parent,

@@ -81,6 +81,14 @@ namespace winrt::emfe::implementation
         }
         AppWindow().Resize({ 1100, 750 });
 
+        // Replace the system-localized ContextFlyout on XAML-declared
+        // TextBoxes with our English one. Runtime-created TextBoxes
+        // (register rows, memory dump cells) are fixed at their creation
+        // site inside AddRegRow / AddRegPairToGrid / BuildMemDumpList.
+        AttachEnglishTextFlyout(DisasmAddrBox());
+        AttachEnglishTextFlyout(TxtMemAddr());
+        AttachEnglishTextFlyout(MemSizeBox());
+
         // Close child windows and destroy plugin instance on main window close
         this->Closed([this](auto&&, auto&&) {
             if (m_framebufferWindow) {
@@ -687,6 +695,32 @@ namespace winrt::emfe::implementation
     }
 
     // ========================================================================
+    // English-only TextBox context menu (see feedback_emfe_ui_english_only)
+    // ========================================================================
+
+    void MainWindow::AttachEnglishTextFlyout(Controls::TextBox const& tb)
+    {
+        if (!tb) return;
+        auto menu = Controls::MenuFlyout();
+
+        auto addItem = [&](std::wstring_view label, std::function<void()> action) {
+            auto item = Controls::MenuFlyoutItem();
+            item.Text(winrt::hstring(std::wstring(label)));
+            item.Click([action = std::move(action)](auto&&, auto&&) { action(); });
+            menu.Items().Append(item);
+        };
+
+        addItem(L"Cut",   [tb]() { tb.CutSelectionToClipboard(); });
+        addItem(L"Copy",  [tb]() { tb.CopySelectionToClipboard(); });
+        addItem(L"Paste", [tb]() { tb.PasteFromClipboard(); });
+        menu.Items().Append(Controls::MenuFlyoutSeparator());
+        addItem(L"Select All", [tb]() { tb.SelectAll(); });
+
+        tb.ContextFlyout(menu);
+        tb.SelectionFlyout(menu);
+    }
+
+    // ========================================================================
     // Register panel — em68030 compatible 2-column layout
     // ========================================================================
 
@@ -714,6 +748,7 @@ namespace winrt::emfe::implementation
         valueBox.Padding({ 6, 3, 6, 4 });
         valueBox.BorderThickness({ 1, 1, 1, 1 });
         valueBox.MinHeight(0);
+        AttachEnglishTextFlyout(valueBox);
 
         sp.Children().Append(label);
         sp.Children().Append(valueBox);
@@ -749,6 +784,7 @@ namespace winrt::emfe::implementation
         valueBox.Padding({ 6, 3, 6, 4 });
         valueBox.BorderThickness({ 1, 1, 1, 1 });
         valueBox.MinHeight(0);
+        AttachEnglishTextFlyout(valueBox);
 
         sp.Children().Append(label);
         sp.Children().Append(valueBox);
@@ -1236,6 +1272,7 @@ namespace winrt::emfe::implementation
                 cell.IsTabStop(false);
                 cell.IsHitTestVisible(false);
                 cell.TextAlignment(TextAlignment::Center);
+                AttachEnglishTextFlyout(cell);
 
                 // Edit mode focus handlers
                 int capturedR = r, capturedC = c;
