@@ -50,6 +50,25 @@ struct ResumeOnDispatcher
     void await_resume() const noexcept {}
 };
 
+// Walks the visual tree under `root` looking for the first ScrollViewer.
+// TextBox's default template wraps its content in a ScrollViewer named
+// "ContentElement"; we use this to force-scroll the console to the bottom
+// after each render tick (setting SelectionStart isn't enough on WinUI 3
+// when text is replaced wholesale every tick).
+static Microsoft::UI::Xaml::Controls::ScrollViewer FindInnerScrollViewer(
+    Microsoft::UI::Xaml::DependencyObject const& root)
+{
+    using namespace Microsoft::UI::Xaml;
+    if (!root) return nullptr;
+    int n = Media::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; ++i) {
+        auto child = Media::VisualTreeHelper::GetChild(root, i);
+        if (auto sv = child.try_as<Controls::ScrollViewer>()) return sv;
+        if (auto found = FindInnerScrollViewer(child)) return found;
+    }
+    return nullptr;
+}
+
 namespace winrt::emfe::implementation
 {
     MainWindow::MainWindow()
@@ -1854,6 +1873,11 @@ namespace winrt::emfe::implementation
         m_consoleTextBox.BorderThickness({ 0, 0, 0, 0 });
         m_consoleTextBox.Padding({ 4, 4, 4, 4 });
         ScrollViewer::SetHorizontalScrollBarVisibility(m_consoleTextBox, ScrollBarVisibility::Disabled);
+        // Vertical scrollbar on the TextBox's inner ScrollViewer — Auto so it
+        // appears whenever the rendered terminal (viewport + scrollback) is
+        // taller than the window. Default for TextBox is Hidden (overlay),
+        // which made the scrollbar invisible to the user.
+        ScrollViewer::SetVerticalScrollBarVisibility(m_consoleTextBox, ScrollBarVisibility::Auto);
         SetupConsoleContextMenu();
 
         // Override theme resources to prevent color changes on PointerOver/Focused
@@ -2123,6 +2147,16 @@ namespace winrt::emfe::implementation
                     m_consoleTextBox.Text(winrt::to_hstring(rendered));
                     auto textLen = static_cast<int32_t>(m_consoleTextBox.Text().size());
                     m_consoleTextBox.Select(textLen, 0);
+                    // Force the inner ScrollViewer to the bottom so the latest
+                    // terminal output is visible. Setting SelectionStart alone
+                    // doesn't scroll on a wholesale Text() replacement in WinUI 3.
+                    m_consoleTextBox.UpdateLayout();
+                    if (auto sv = FindInnerScrollViewer(m_consoleTextBox)) {
+                        sv.ChangeView(nullptr,
+                                      winrt::box_value(sv.ScrollableHeight()).as<winrt::Windows::Foundation::IReference<double>>(),
+                                      nullptr,
+                                      /*disableAnimation=*/true);
+                    }
                 }
             });
             m_consoleRenderTimer.Start();
