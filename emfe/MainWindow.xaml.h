@@ -189,6 +189,9 @@ namespace winrt::emfe::implementation
         Microsoft::UI::Xaml::Controls::Image m_fbImage{ nullptr };
         Microsoft::UI::Xaml::Controls::TextBlock m_fbStatusText{ nullptr };
         Microsoft::UI::Xaml::Controls::TextBlock m_fbInputStatus{ nullptr };
+        // Status bar root, retained so RefreshCodeBehindBrushes can repaint it
+        // when the theme changes while the framebuffer window is open.
+        Microsoft::UI::Xaml::Controls::StackPanel m_fbStatusBar{ nullptr };
         winrt::com_ptr<CursorGrid> m_fbGrid;
         Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap m_fbBitmap{ nullptr };
         Microsoft::UI::Xaml::DispatcherTimer m_fbTimer{ nullptr };

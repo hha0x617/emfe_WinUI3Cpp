@@ -2737,6 +2737,16 @@ namespace winrt::emfe::implementation
 
         UpdateDisassembly();
         UpdateMemoryDump(m_memoryAddress);
+
+        // Framebuffer status bar — its brushes were assigned directly via
+        // GetThemeBrush, so they don't auto-track RequestedTheme. Repaint
+        // them when the framebuffer window happens to be open.
+        if (m_fbStatusBar)
+            m_fbStatusBar.Background(GetThemeBrush(L"ThemePanelBg"));
+        if (m_fbStatusText)
+            m_fbStatusText.Foreground(GetThemeBrush(L"ThemeForeground"));
+        if (m_fbInputStatus)
+            m_fbInputStatus.Foreground(GetThemeBrush(L"ThemeDimFg"));
     }
 
     void MainWindow::ApplyTheme(const std::string& themeName)
@@ -2789,6 +2799,7 @@ namespace winrt::emfe::implementation
             m_fbGrid = nullptr;
             m_fbStatusText = nullptr;
             m_fbInputStatus = nullptr;
+            m_fbStatusBar = nullptr;
             m_fbLastWidth = m_fbLastHeight = m_fbLastBpp = 0;
             m_fbInputCaptured = false;
         });
@@ -2822,21 +2833,21 @@ namespace winrt::emfe::implementation
         Grid::SetRow(*m_fbGrid, 0);
         outerPanel.Children().Append(*m_fbGrid);
 
-        auto statusBar = StackPanel();
-        statusBar.Orientation(Orientation::Horizontal);
-        statusBar.Background(GetThemeBrush(L"ThemePanelBg"));
-        statusBar.Padding({ 8, 4, 8, 4 });
+        m_fbStatusBar = StackPanel();
+        m_fbStatusBar.Orientation(Orientation::Horizontal);
+        m_fbStatusBar.Background(GetThemeBrush(L"ThemePanelBg"));
+        m_fbStatusBar.Padding({ 8, 4, 8, 4 });
         m_fbStatusText = TextBlock();
         m_fbStatusText.FontSize(12);
         m_fbStatusText.Foreground(GetThemeBrush(L"ThemeForeground"));
-        statusBar.Children().Append(m_fbStatusText);
+        m_fbStatusBar.Children().Append(m_fbStatusText);
         m_fbInputStatus = TextBlock();
         m_fbInputStatus.FontSize(12);
         m_fbInputStatus.Margin({ 16, 0, 0, 0 });
         m_fbInputStatus.Foreground(GetThemeBrush(L"ThemeDimFg"));
-        statusBar.Children().Append(m_fbInputStatus);
-        Grid::SetRow(statusBar, 1);
-        outerPanel.Children().Append(statusBar);
+        m_fbStatusBar.Children().Append(m_fbInputStatus);
+        Grid::SetRow(m_fbStatusBar, 1);
+        outerPanel.Children().Append(m_fbStatusBar);
 
         SetThemedWindowContent(m_framebufferWindow, outerPanel);
 
