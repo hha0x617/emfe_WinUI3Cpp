@@ -2160,7 +2160,7 @@ namespace winrt::emfe::implementation
         container.Children().Append(m_consoleTextBox);
         container.Children().Append(searchBar);
 
-        m_consoleWindow.Content(container);
+        SetThemedWindowContent(m_consoleWindow, container);
 
         // Set up render timer for VT100 terminal
         if (!m_consoleRenderTimer) {
@@ -2696,6 +2696,15 @@ namespace winrt::emfe::implementation
         }
     }
 
+    void MainWindow::SetThemedWindowContent(
+        Microsoft::UI::Xaml::Window const& window,
+        Microsoft::UI::Xaml::UIElement const& root)
+    {
+        if (!window) return;
+        window.Content(root);
+        ApplyThemeToWindow(window, m_isDark);
+    }
+
     Media::Brush MainWindow::GetThemeBrush(const wchar_t* key)
     {
         try {
@@ -2744,7 +2753,8 @@ namespace winrt::emfe::implementation
                 effective = "Dark";
         }
         bool isDark = (effective != "Light");
-        if (isDark == m_isDark) return;
+        if (m_themeApplied && isDark == m_isDark) return;
+        m_themeApplied = true;
         m_isDark = isDark;
 
         ApplyThemeToWindow(*this, isDark);
@@ -2828,8 +2838,7 @@ namespace winrt::emfe::implementation
         Grid::SetRow(statusBar, 1);
         outerPanel.Children().Append(statusBar);
 
-        m_framebufferWindow.Content(outerPanel);
-        ApplyThemeToWindow(m_framebufferWindow, m_isDark);
+        SetThemedWindowContent(m_framebufferWindow, outerPanel);
 
         // Input handlers
         m_fbGrid->PointerPressed([this](auto&&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
@@ -3042,8 +3051,7 @@ namespace winrt::emfe::implementation
         m_breakpointsWindow.AppWindow().Resize({ 500, 420 });
         m_breakpointsWindow.Closed([this](auto&&, auto&&) { m_breakpointsWindow = nullptr; });
 
-        BuildBreakpointsUI();
-        ApplyThemeToWindow(m_breakpointsWindow, m_isDark);
+        BuildBreakpointsUI();   // calls SetThemedWindowContent internally
         m_breakpointsWindow.Activate();
     }
 
@@ -3416,7 +3424,7 @@ namespace winrt::emfe::implementation
         Grid::SetRow(toolbar, 1);
         outerPanel.Children().Append(toolbar);
 
-        m_breakpointsWindow.Content(outerPanel);
+        SetThemedWindowContent(m_breakpointsWindow, outerPanel);
     }
 
     void MainWindow::RefreshBreakpointsWindow()
@@ -3535,8 +3543,7 @@ namespace winrt::emfe::implementation
         m_callStackWindow.Title(L"Call Stack");
         m_callStackWindow.AppWindow().Resize({ 620, 380 });
         m_callStackWindow.Closed([this](auto&&, auto&&) { m_callStackWindow = nullptr; });
-        BuildCallStackUI();
-        ApplyThemeToWindow(m_callStackWindow, m_isDark);
+        BuildCallStackUI();   // calls SetThemedWindowContent internally
         m_callStackWindow.Activate();
     }
 
@@ -3668,7 +3675,7 @@ namespace winrt::emfe::implementation
         Grid::SetRow(toolbar, 1);
         outerPanel.Children().Append(toolbar);
 
-        m_callStackWindow.Content(outerPanel);
+        SetThemedWindowContent(m_callStackWindow, outerPanel);
     }
 
     void MainWindow::RefreshCallStackWindow()
@@ -4293,7 +4300,7 @@ namespace winrt::emfe::implementation
         outerGrid.Children().Append(btnPanel);
 
         m_settingsRebuilding = true;
-        m_settingsWindow.Content(outerGrid);
+        SetThemedWindowContent(m_settingsWindow, outerGrid);
         m_settingsRebuilding = false;
     }
 
@@ -4311,8 +4318,7 @@ namespace winrt::emfe::implementation
             m_pendingLists.clear();
         });
 
-        BuildSettingsContent();
-        ApplyThemeToWindow(m_settingsWindow, m_isDark);
+        BuildSettingsContent();   // calls SetThemedWindowContent internally
         m_settingsWindow.Activate();
     }
 }

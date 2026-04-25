@@ -270,10 +270,21 @@ namespace winrt::emfe::implementation
             bool regexMode, bool caseSensitive);
         void ConsoleHighlightMatch(int pos, int length, int current, int total);
 
-        // Theme
+        // Theme. m_themeApplied gates the (isDark == m_isDark) early-return
+        // so the very first ApplyTheme() at startup always runs end-to-end —
+        // RequestedTheme + DwmSetWindowAttribute must be applied at least
+        // once before they can be skipped on subsequent no-op calls.
         bool m_isDark = true;
+        bool m_themeApplied = false;
         void ApplyTheme(const std::string& themeName);
         void ApplyThemeToWindow(Microsoft::UI::Xaml::Window const& window, bool isDark);
+        // Use this instead of Window.Content(...) for any Window whose root is
+        // assigned from code-behind. WinUI 3 Window is not a FrameworkElement
+        // and cannot hold RequestedTheme itself — the theme lives on the root
+        // and is lost on every Content swap. This helper re-applies it.
+        void SetThemedWindowContent(
+            Microsoft::UI::Xaml::Window const& window,
+            Microsoft::UI::Xaml::UIElement const& root);
         Microsoft::UI::Xaml::Media::Brush GetThemeBrush(const wchar_t* key);
         void RefreshCodeBehindBrushes();
 
