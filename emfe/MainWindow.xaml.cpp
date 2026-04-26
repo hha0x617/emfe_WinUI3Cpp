@@ -3977,6 +3977,32 @@ namespace winrt::emfe::implementation
 
     void MainWindow::SaveSettingsToStaging()
     {
+        // Detect TargetOS change BEFORE we start writing values. Some plugins
+        // (notably mc68030) react to a TargetOS write by swapping which list
+        // is bound to a per-OS LIST setting (e.g. Mvme147ScsiDisks). The
+        // dialog-side cache m_pendingLists won't notice that swap, so we have
+        // to flush our staged list edits to the plugin under the OLD OS first
+        // (so the plugin's per-OS swap captures them on the right slot), then
+        // drop the cache so the next BuildSettingsContent / EnsureListStaged
+        // re-reads the new OS's list.
+        std::string prevTargetOS, newTargetOS;
+        bool targetOSChanging = false;
+        for (auto& sc : m_settingControls) {
+            if (sc.key != "TargetOS" || sc.type != EMFE_SETTING_COMBO) continue;
+            auto combo = sc.control.as<ComboBox>();
+            if (auto sel = combo.SelectedItem())
+                newTargetOS = winrt::to_string(winrt::unbox_value<winrt::hstring>(sel));
+            if (auto raw = m_plugin.emfe_get_setting(m_instance, "TargetOS"))
+                prevTargetOS = raw;
+            if (!newTargetOS.empty() && prevTargetOS != newTargetOS)
+                targetOSChanging = true;
+            break;
+        }
+        if (targetOSChanging) {
+            ApplyStagedListsToPlugin();
+            m_pendingLists.clear();
+        }
+
         for (auto& sc : m_settingControls) {
             std::string val;
             switch (sc.type) {
