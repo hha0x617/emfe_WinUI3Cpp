@@ -107,6 +107,10 @@ public:
         // UI on flags registers. Fall back to plain hex display when absent.
         emfe_get_register_flag_defs = reinterpret_cast<decltype(::emfe_get_register_flag_defs)*>(
             ::GetProcAddress(m_hModule, "emfe_get_register_flag_defs"));
+        // Optional export: synthetic register view dependencies (e.g.
+        // mc6809 D = A:B) for live recompute during Edit mode.
+        emfe_get_register_view_deps = reinterpret_cast<decltype(::emfe_get_register_view_deps)*>(
+            ::GetProcAddress(m_hModule, "emfe_get_register_view_deps"));
 
         #undef RESOLVE
         return true;
@@ -183,6 +187,7 @@ public:
         emfe_remove_list_item = nullptr;
         emfe_is_list_pending = nullptr;
         emfe_get_register_flag_defs = nullptr;
+        emfe_get_register_view_deps = nullptr;
         emfe_save_settings = nullptr;
         emfe_load_settings = nullptr;
         emfe_set_data_dir = nullptr;
@@ -260,6 +265,7 @@ public:
     decltype(::emfe_remove_list_item)*         emfe_remove_list_item = nullptr;
     decltype(::emfe_is_list_pending)*          emfe_is_list_pending = nullptr;
     decltype(::emfe_get_register_flag_defs)*   emfe_get_register_flag_defs = nullptr;
+    decltype(::emfe_get_register_view_deps)*   emfe_get_register_view_deps = nullptr;
     decltype(::emfe_save_settings)*            emfe_save_settings = nullptr;
     decltype(::emfe_load_settings)*            emfe_load_settings = nullptr;
     decltype(::emfe_set_data_dir)*             emfe_set_data_dir = nullptr;

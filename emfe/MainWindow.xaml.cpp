@@ -801,6 +801,7 @@ namespace winrt::emfe::implementation
         if (!m_instance) return;
         m_regEntries.clear();
         m_flagEntries.clear();
+        m_viewRegEntries.clear();
 
         RegGroupsContainer().Children().Clear();
 
@@ -886,6 +887,26 @@ namespace winrt::emfe::implementation
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
                     m_regEntries.back().readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
+
+                    // Synthetic / view register: if the plugin advertises
+                    // composition deps for this reg_id, store them so
+                    // BuildRegisterPanel's tail loop can wire up live
+                    // recompute on TextChanged of each source register.
+                    // View registers are also implicitly read-only — the
+                    // user edits the source, the view follows.
+                    if (m_plugin.emfe_get_register_view_deps) {
+                        const EmfeRegViewDep* deps = nullptr;
+                        int32_t nDeps = m_plugin.emfe_get_register_view_deps(
+                            m_instance, d.reg_id, &deps);
+                        if (nDeps > 0 && deps) {
+                            m_regEntries.back().readOnly = true;
+                            m_viewRegEntries.push_back({
+                                d.reg_id, d.bit_width,
+                                m_regEntries.back().valueBox,
+                                std::vector<EmfeRegViewDep>(deps, deps + nDeps)
+                            });
+                        }
+                    }
                 }
                 RegGroupsContainer().Children().Append(grid);
             } else {
@@ -899,6 +920,26 @@ namespace winrt::emfe::implementation
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
                     m_regEntries.back().readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
+
+                    // Synthetic / view register: if the plugin advertises
+                    // composition deps for this reg_id, store them so
+                    // BuildRegisterPanel's tail loop can wire up live
+                    // recompute on TextChanged of each source register.
+                    // View registers are also implicitly read-only — the
+                    // user edits the source, the view follows.
+                    if (m_plugin.emfe_get_register_view_deps) {
+                        const EmfeRegViewDep* deps = nullptr;
+                        int32_t nDeps = m_plugin.emfe_get_register_view_deps(
+                            m_instance, d.reg_id, &deps);
+                        if (nDeps > 0 && deps) {
+                            m_regEntries.back().readOnly = true;
+                            m_viewRegEntries.push_back({
+                                d.reg_id, d.bit_width,
+                                m_regEntries.back().valueBox,
+                                std::vector<EmfeRegViewDep>(deps, deps + nDeps)
+                            });
+                        }
+                    }
                     if (d.type == EMFE_REG_FLOAT) box.FontSize(11);
 
                     // If this register has a flag-bit decomposition (and the
@@ -989,6 +1030,60 @@ namespace winrt::emfe::implementation
                 RegGroupsContainer().Children().Append(panel);
             }
         }
+
+        // Wire up TextChanged on every source register's textbox so that
+        // synthetic view registers (mc6809 D = A:B etc.) recompute live
+        // while the user edits sources in Edit mode. Done after all
+        // register rows have been built so the source textboxes exist.
+        for (auto& view : m_viewRegEntries) {
+            uint32_t viewRegId = view.regId;
+            for (auto& dep : view.deps) {
+                auto srcIt = std::find_if(m_regEntries.begin(), m_regEntries.end(),
+                    [&dep](const RegUIEntry& e) { return e.regId == dep.reg_id; });
+                if (srcIt == m_regEntries.end() || !srcIt->valueBox) continue;
+                srcIt->valueBox.TextChanged([this, viewRegId](auto&&, auto&&) {
+                    if (m_suppressFlagSync) return;
+                    RecomputeViewRegister(viewRegId);
+                });
+            }
+        }
+    }
+
+    void MainWindow::RecomputeViewRegister(uint32_t regId)
+    {
+        auto viewIt = std::find_if(m_viewRegEntries.begin(), m_viewRegEntries.end(),
+            [regId](const RegViewEntry& v) { return v.regId == regId; });
+        if (viewIt == m_viewRegEntries.end() || !viewIt->viewBox) return;
+
+        uint64_t v = 0;
+        for (auto& dep : viewIt->deps) {
+            auto srcIt = std::find_if(m_regEntries.begin(), m_regEntries.end(),
+                [&dep](const RegUIEntry& e) { return e.regId == dep.reg_id; });
+            if (srcIt == m_regEntries.end() || !srcIt->valueBox) continue;
+            uint64_t srcVal = 0;
+            try { srcVal = std::stoull(winrt::to_string(srcIt->valueBox.Text()), nullptr, 16); }
+            catch (...) { continue; }
+            uint64_t mask = (dep.width >= 64) ? ~0ULL : ((uint64_t{1} << dep.width) - 1);
+            srcVal &= mask;
+            v |= srcVal << dep.shift;
+        }
+
+        std::wstring text;
+        if (viewIt->bitWidth <= 8)
+            text = std::format(L"{:02X}", static_cast<uint8_t>(v));
+        else if (viewIt->bitWidth <= 16)
+            text = std::format(L"{:04X}", static_cast<uint16_t>(v));
+        else if (viewIt->bitWidth <= 32)
+            text = std::format(L"{:08X}", static_cast<uint32_t>(v));
+        else
+            text = std::format(L"{:016X}", v);
+
+        // Suppress flag-sync re-entrancy: writing into the view textbox
+        // would trip the textbox→checkbox handler if any existed for the
+        // view register (none today, but safe regardless).
+        m_suppressFlagSync = true;
+        viewIt->viewBox.Text(text);
+        m_suppressFlagSync = false;
     }
 
     void MainWindow::UpdateRegisters()

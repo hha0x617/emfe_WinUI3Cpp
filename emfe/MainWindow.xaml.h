@@ -116,6 +116,21 @@ namespace winrt::emfe::implementation
             Microsoft::UI::Xaml::Controls::CheckBox checkBox{ nullptr };
         };
         std::vector<FlagCheckEntry> m_flagEntries;
+
+        // Synthetic / view register entries — registers whose value is
+        // composed live from one or more source registers (see
+        // emfe_get_register_view_deps). When the user edits the source
+        // registers' textboxes in Edit mode, the view register's textbox
+        // is recomputed from the source values without round-tripping
+        // through emfe_set_registers. Example: mc6809 D = A:B.
+        struct RegViewEntry {
+            uint32_t regId;
+            uint32_t bitWidth;
+            Microsoft::UI::Xaml::Controls::TextBox viewBox{ nullptr };
+            std::vector<EmfeRegViewDep> deps;
+        };
+        std::vector<RegViewEntry> m_viewRegEntries;
+        void RecomputeViewRegister(uint32_t regId);
         // Re-entrancy guard for two-way checkbox ↔ textbox sync. Set true
         // while the checkbox-click handler writes into the textbox, so the
         // textbox's TextChanged handler skips its own checkbox refresh and
