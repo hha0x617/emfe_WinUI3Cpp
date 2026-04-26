@@ -920,7 +920,10 @@ namespace winrt::emfe::implementation
                 panel.Margin({ 0, 2, 0, 0 });
                 for (auto idx : indices) {
                     auto const& d = defs[idx];
-                    int width = (d.bit_width <= 16) ? 70 : (d.bit_width <= 32) ? 95 : 130;
+                    int width = (d.bit_width <= 8)  ? 45
+                              : (d.bit_width <= 16) ? 65
+                              : (d.bit_width <= 32) ? 95
+                                                    : 130;
                     auto box = AddRegRow(panel, d.name ? d.name : "?", d.reg_id, width);
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
@@ -994,7 +997,9 @@ namespace winrt::emfe::implementation
                                     else
                                         v &= ~mask;
                                     std::wstring text;
-                                    if (it->bitWidth <= 16)
+                                    if (it->bitWidth <= 8)
+                                        text = std::format(L"{:02X}", static_cast<uint8_t>(v));
+                                    else if (it->bitWidth <= 16)
                                         text = std::format(L"{:04X}", static_cast<uint16_t>(v));
                                     else if (it->bitWidth <= 32)
                                         text = std::format(L"{:08X}", static_cast<uint32_t>(v));
@@ -1107,6 +1112,8 @@ namespace winrt::emfe::implementation
             std::wstring text;
             if (e.type == EMFE_REG_FLOAT)
                 text = std::format(L"{:.6f}", v.value.f64);
+            else if (e.bitWidth <= 8)
+                text = std::format(L"{:02X}", static_cast<uint8_t>(v.value.u64));
             else if (e.bitWidth <= 16)
                 text = std::format(L"{:04X}", static_cast<uint16_t>(v.value.u64));
             else if (e.bitWidth <= 32)
