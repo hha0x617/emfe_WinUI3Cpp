@@ -3805,13 +3805,46 @@ namespace winrt::emfe::implementation
         EnsureListStaged(listKey);
         auto& edit = m_pendingLists[listKey];
 
+        // Pending indicator: REQUIRES_RESET LIST setting whose staged value
+        // (== current m_pendingLists snapshot, since EnsureListStaged just
+        // refreshed it from the plugin's stagedConfig) differs from what the
+        // running hardware actually has applied. Same UX as the per-row '*'
+        // marker on plain settings — show it next to the section label.
+        bool isPending = false;
+        if (m_plugin.emfe_is_list_pending) {
+            // ApplyStagedListsToPlugin pushes m_pendingLists into stagedConfig
+            // before the dirty-check so user-typed-but-unflushed edits also
+            // count as pending.
+            ApplyStagedListsToPlugin();
+            isPending = (m_plugin.emfe_is_list_pending(m_instance, listKey.c_str()) != 0);
+        }
+
+        auto headerRow = StackPanel();
+        headerRow.Orientation(Orientation::Horizontal);
+        headerRow.Spacing(4);
+        headerRow.Margin({ 0, 8, 0, 4 });
+
         auto header = TextBlock();
         header.Text(winrt::to_hstring(label));
         header.FontSize(13);
         header.FontWeight(Windows::UI::Text::FontWeight{600});  // SemiBold
-        header.Margin({ 0, 8, 0, 4 });
         header.Foreground(GetThemeBrush(L"ThemeRegHeaderFg"));
-        parent.Children().Append(header);
+        headerRow.Children().Append(header);
+
+        if (isPending) {
+            auto pendingMark = TextBlock();
+            pendingMark.Text(L"*");
+            pendingMark.FontSize(14);
+            pendingMark.FontWeight(Windows::UI::Text::FontWeight{700});
+            pendingMark.VerticalAlignment(VerticalAlignment::Center);
+            pendingMark.Foreground(Media::SolidColorBrush(
+                Windows::UI::Color{ 0xFF, 0xFF, 0x99, 0x00 }));
+            Controls::ToolTipService::SetToolTip(pendingMark, winrt::box_value(winrt::hstring(
+                L"This change is staged but not yet applied. It will take effect on the next full reset or when emfe restarts.")));
+            headerRow.Children().Append(pendingMark);
+        }
+
+        parent.Children().Append(headerRow);
 
         int itemCount = static_cast<int>(edit.items.size());
 

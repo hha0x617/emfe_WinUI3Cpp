@@ -98,6 +98,11 @@ public:
         // the pointer before calling.
         emfe_console_tx_space = reinterpret_cast<decltype(::emfe_console_tx_space)*>(
             ::GetProcAddress(m_hModule, "emfe_console_tx_space"));
+        // Optional export: older plugin DLLs without LIST pending support
+        // simply won't have the pending marker; host checks the pointer
+        // before calling and falls back to "not pending".
+        emfe_is_list_pending = reinterpret_cast<decltype(::emfe_is_list_pending)*>(
+            ::GetProcAddress(m_hModule, "emfe_is_list_pending"));
 
         #undef RESOLVE
         return true;
@@ -172,6 +177,7 @@ public:
         emfe_set_list_item_field = nullptr;
         emfe_add_list_item = nullptr;
         emfe_remove_list_item = nullptr;
+        emfe_is_list_pending = nullptr;
         emfe_save_settings = nullptr;
         emfe_load_settings = nullptr;
         emfe_set_data_dir = nullptr;
@@ -247,6 +253,7 @@ public:
     decltype(::emfe_set_list_item_field)*      emfe_set_list_item_field = nullptr;
     decltype(::emfe_add_list_item)*            emfe_add_list_item = nullptr;
     decltype(::emfe_remove_list_item)*         emfe_remove_list_item = nullptr;
+    decltype(::emfe_is_list_pending)*          emfe_is_list_pending = nullptr;
     decltype(::emfe_save_settings)*            emfe_save_settings = nullptr;
     decltype(::emfe_load_settings)*            emfe_load_settings = nullptr;
     decltype(::emfe_set_data_dir)*             emfe_set_data_dir = nullptr;
