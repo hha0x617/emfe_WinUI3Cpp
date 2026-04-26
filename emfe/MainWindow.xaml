@@ -274,22 +274,22 @@
                               HorizontalScrollMode="Auto"
                               Background="Transparent" Padding="0">
                     <StackPanel x:Name="RegisterPanel" Margin="4" Background="Transparent">
-                        <!-- Header with Edit/Apply/Cancel -->
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Registers" Style="{StaticResource PanelHeaderStyle}"/>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-                                <Button x:Name="BtnRegEdit" Content="Edit" FontSize="11" Padding="6,2"
-                                        Click="OnRegEdit"/>
-                                <Button x:Name="BtnRegApply" Content="Apply" FontSize="11" Padding="6,2"
-                                        Click="OnRegApply" Visibility="Collapsed"/>
-                                <Button x:Name="BtnRegCancel" Content="Cancel" FontSize="11" Padding="6,2"
-                                        Click="OnRegCancel" Visibility="Collapsed"/>
-                            </StackPanel>
-                        </Grid>
+                        <!-- Header with Edit/Apply/Cancel — left-aligned to match
+                             the Disassembly / Memory Dump pane headers. The previous
+                             Grid (Star, Auto) layout pushed the buttons to the right
+                             edge of whatever the ScrollViewer's content width was,
+                             which after horizontal-scroll was enabled (db31f39) put
+                             them past the visible viewport. -->
+                        <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,0,4">
+                            <TextBlock Text="Registers" Style="{StaticResource PanelHeaderStyle}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnRegEdit" Content="Edit" FontSize="11" Padding="6,2"
+                                    Click="OnRegEdit"/>
+                            <Button x:Name="BtnRegApply" Content="Apply" FontSize="11" Padding="6,2"
+                                    Click="OnRegApply" Visibility="Collapsed"/>
+                            <Button x:Name="BtnRegCancel" Content="Cancel" FontSize="11" Padding="6,2"
+                                    Click="OnRegCancel" Visibility="Collapsed"/>
+                        </StackPanel>
 
                         <!-- Register groups dynamically built from emfe_get_register_defs.
                              Each group becomes a header + a Grid/StackPanel of rows.
