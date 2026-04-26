@@ -920,7 +920,32 @@ namespace winrt::emfe::implementation
                                 chk.IsEnabled(false);
                                 if (auto fg = GetThemeBrush(L"ThemeForeground"))
                                     chk.Foreground(fg);
-                                m_flagEntries.push_back({ regId, bits[b].bit_index, chk });
+                                uint8_t bitIndex = bits[b].bit_index;
+                                // Live-mirror checkbox edits into the value
+                                // textbox hex display while in Edit mode.
+                                // Register write-back still happens at OnRegApply.
+                                chk.Click([this, regId, bitIndex, chk](auto&&, auto&&) {
+                                    auto it = std::find_if(m_regEntries.begin(), m_regEntries.end(),
+                                        [regId](const RegUIEntry& e) { return e.regId == regId; });
+                                    if (it == m_regEntries.end() || !it->valueBox) return;
+                                    uint64_t v = 0;
+                                    try { v = std::stoull(winrt::to_string(it->valueBox.Text()), nullptr, 16); }
+                                    catch (...) { return; }
+                                    uint64_t mask = uint64_t{1} << bitIndex;
+                                    if (winrt::unbox_value_or<bool>(chk.IsChecked(), false))
+                                        v |= mask;
+                                    else
+                                        v &= ~mask;
+                                    std::wstring text;
+                                    if (it->bitWidth <= 16)
+                                        text = std::format(L"{:04X}", static_cast<uint16_t>(v));
+                                    else if (it->bitWidth <= 32)
+                                        text = std::format(L"{:08X}", static_cast<uint32_t>(v));
+                                    else
+                                        text = std::format(L"{:016X}", v);
+                                    it->valueBox.Text(text);
+                                });
+                                m_flagEntries.push_back({ regId, bitIndex, chk });
                                 (void)readOnly; // reserved for future per-register read-only handling
                                 flagRow.Children().Append(chk);
                             }
