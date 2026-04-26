@@ -858,9 +858,16 @@ namespace winrt::emfe::implementation
 
             if (useGrid) {
                 auto grid = Grid();
+                // Auto-sized columns + Left alignment so a row only takes
+                // (label width + textbox width) per column. With Star
+                // widths the columns inherited the parent ScrollViewer's
+                // width, which since the horizontal scrollbar landed
+                // could be far wider than needed and stretched the
+                // 2-column register grid.
+                grid.HorizontalAlignment(HorizontalAlignment::Left);
                 Controls::ColumnDefinition c0, c1;
-                c0.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
-                c1.Width(GridLengthHelper::FromValueAndType(1.0, GridUnitType::Star));
+                c0.Width(GridLengthHelper::Auto());
+                c1.Width(GridLengthHelper::Auto());
                 grid.ColumnDefinitions().Append(c0);
                 grid.ColumnDefinitions().Append(c1);
                 int numRows = (static_cast<int>(indices.size()) + 1) / 2;
