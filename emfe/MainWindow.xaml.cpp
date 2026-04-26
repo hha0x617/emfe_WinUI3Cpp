@@ -902,7 +902,10 @@ namespace winrt::emfe::implementation
                             auto flagRow = StackPanel();
                             flagRow.Orientation(Orientation::Horizontal);
                             flagRow.Spacing(8);
-                            flagRow.Margin({ 0, 0, 0, 4 });
+                            // Indent so checkboxes start where the value
+                            // textbox does on the row above (label width 35
+                            // + spacing 4, matching AddRegRow's layout).
+                            flagRow.Margin({ 39, 0, 0, 4 });
                             uint32_t regId = d.reg_id;
                             bool readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
                             for (int32_t b = 0; b < nBits; b++) {
