@@ -730,7 +730,9 @@ namespace winrt::emfe::implementation
         auto sp = StackPanel();
         sp.Orientation(Orientation::Horizontal);
         sp.Spacing(4);
-        sp.Margin({ 0, 1, 8, 1 });
+        // Wider right margin for column 0 so the first row's value box
+        // is visibly separated from the second row's label.
+        sp.Margin({ 0, 1, (col == 0) ? 16.0 : 0.0, 1 });
 
         auto label = TextBlock();
         label.Text(winrt::to_hstring(name));
