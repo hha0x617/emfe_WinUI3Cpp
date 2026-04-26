@@ -849,13 +849,18 @@ namespace winrt::emfe::implementation
             RegGroupsContainer().Children().Append(header);
 
             // Heuristic: if the group has >= 4 narrow regs (bits <= 32) that all
-            // share a short (<=3 char) name, use a 2-column grid for compactness.
-            // Otherwise, stack vertically.
+            // share a short (<=3 char) name AND none of them is a FLAGS
+            // register, use a 2-column grid for compactness. Otherwise, stack
+            // vertically — the FLAGS exclusion matches emfe_CsWPF's heuristic
+            // and keeps mixed groups (like mc6809's "CPU" with CC, or any
+            // group containing a register that grows a checkbox row) on a
+            // tidy single-column layout.
             bool useGrid = indices.size() >= 4;
             if (useGrid) {
                 for (auto idx : indices) {
                     if (defs[idx].bit_width > 32) { useGrid = false; break; }
                     if (!defs[idx].name || strlen(defs[idx].name) > 3) { useGrid = false; break; }
+                    if (defs[idx].flags & EMFE_REG_FLAG_FLAGS) { useGrid = false; break; }
                 }
             }
 
