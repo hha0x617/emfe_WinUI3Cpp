@@ -96,6 +96,7 @@ namespace winrt::emfe::implementation
             uint32_t regId;
             uint32_t bitWidth;
             EmfeRegType type;
+            bool readOnly = false;   // EMFE_REG_FLAG_READONLY → textbox stays IsReadOnly even in Edit mode
             Microsoft::UI::Xaml::Controls::TextBox valueBox{ nullptr };
         };
         std::vector<RegUIEntry> m_regEntries;

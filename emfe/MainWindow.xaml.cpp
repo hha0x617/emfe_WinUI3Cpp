@@ -885,6 +885,7 @@ namespace winrt::emfe::implementation
                                      static_cast<int>(k % 2), d.name, d.reg_id);
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
+                    m_regEntries.back().readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
                 }
                 RegGroupsContainer().Children().Append(grid);
             } else {
@@ -897,6 +898,7 @@ namespace winrt::emfe::implementation
                     auto box = AddRegRow(panel, d.name ? d.name : "?", d.reg_id, width);
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
+                    m_regEntries.back().readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
                     if (d.type == EMFE_REG_FLOAT) box.FontSize(11);
 
                     // If this register has a flag-bit decomposition (and the
@@ -1765,7 +1767,8 @@ namespace winrt::emfe::implementation
     void MainWindow::OnRegEdit(Windows::Foundation::IInspectable const&, RoutedEventArgs const&)
     {
         for (auto& e : m_regEntries)
-            e.valueBox.IsReadOnly(false);
+            if (!e.readOnly)
+                e.valueBox.IsReadOnly(false);
         for (auto& f : m_flagEntries)
             f.checkBox.IsEnabled(true);
         BtnRegEdit().Visibility(Visibility::Collapsed);
@@ -1779,6 +1782,7 @@ namespace winrt::emfe::implementation
 
         std::vector<EmfeRegValue> values;
         for (auto& e : m_regEntries) {
+            if (e.readOnly) continue;  // synthetic / view registers (e.g. mc6809 D)
             auto text = winrt::to_string(e.valueBox.Text());
             EmfeRegValue v{};
             v.reg_id = e.regId;
