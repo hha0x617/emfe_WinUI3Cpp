@@ -746,6 +746,9 @@ namespace winrt::emfe::implementation
         valueBox.FontFamily(Media::FontFamily(L"Consolas"));
         valueBox.FontSize(13);
         valueBox.IsReadOnly(true);
+        // See AddRegRow note — WinUI 3's default TextBox MinWidth would
+        // otherwise stretch the 95 px box to ~120 px.
+        valueBox.MinWidth(0);
         valueBox.Width(95);
         valueBox.Padding({ 6, 3, 6, 4 });
         valueBox.BorderThickness({ 1, 1, 1, 1 });
@@ -782,6 +785,11 @@ namespace winrt::emfe::implementation
         valueBox.FontFamily(Media::FontFamily(L"Consolas"));
         valueBox.FontSize(13);
         valueBox.IsReadOnly(true);
+        // WinUI 3's default TextBox style sets MinWidth around 120 px,
+        // which overrides our explicit Width on narrow registers (8-bit
+        // = 45 px, 16-bit = 65 px). Force MinWidth(0) so the explicit
+        // Width below actually takes effect.
+        valueBox.MinWidth(0);
         valueBox.Width(static_cast<double>(textboxWidth));
         valueBox.Padding({ 6, 3, 6, 4 });
         valueBox.BorderThickness({ 1, 1, 1, 1 });
