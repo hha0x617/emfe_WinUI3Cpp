@@ -269,7 +269,10 @@
 
             <!-- Right side: Register Panel (spans both rows) -->
             <Border Grid.Column="1" BorderBrush="{ThemeResource ThemeBorder}" BorderThickness="1" Margin="2">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="Transparent" Padding="0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              HorizontalScrollMode="Auto"
+                              Background="Transparent" Padding="0">
                     <StackPanel x:Name="RegisterPanel" Margin="4" Background="Transparent">
                         <!-- Header with Edit/Apply/Cancel -->
                         <Grid Margin="0,0,0,4">
