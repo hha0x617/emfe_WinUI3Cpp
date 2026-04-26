@@ -943,13 +943,35 @@ namespace winrt::emfe::implementation
                                         text = std::format(L"{:08X}", static_cast<uint32_t>(v));
                                     else
                                         text = std::format(L"{:016X}", v);
+                                    m_suppressFlagSync = true;
                                     it->valueBox.Text(text);
+                                    m_suppressFlagSync = false;
                                 });
                                 m_flagEntries.push_back({ regId, bitIndex, chk });
                                 (void)readOnly; // reserved for future per-register read-only handling
                                 flagRow.Children().Append(chk);
                             }
                             panel.Children().Append(flagRow);
+
+                            // Reverse direction: hex textbox edits flow back
+                            // into the checkbox row in real time. Skips the
+                            // refresh when the checkbox-click handler is the
+                            // one writing the textbox (m_suppressFlagSync).
+                            uint32_t regIdCapture = d.reg_id;
+                            box.TextChanged([this, regIdCapture](auto&&, auto&&) {
+                                if (m_suppressFlagSync) return;
+                                auto it = std::find_if(m_regEntries.begin(), m_regEntries.end(),
+                                    [regIdCapture](const RegUIEntry& e) { return e.regId == regIdCapture; });
+                                if (it == m_regEntries.end() || !it->valueBox) return;
+                                uint64_t v = 0;
+                                try { v = std::stoull(winrt::to_string(it->valueBox.Text()), nullptr, 16); }
+                                catch (...) { return; }
+                                for (auto& f : m_flagEntries) {
+                                    if (f.regId != regIdCapture) continue;
+                                    bool isOn = ((v >> f.bitIndex) & 1ULL) != 0;
+                                    f.checkBox.IsChecked(isOn);
+                                }
+                            });
                         }
                     }
                 }

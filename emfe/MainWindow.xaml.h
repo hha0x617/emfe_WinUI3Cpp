@@ -111,6 +111,12 @@ namespace winrt::emfe::implementation
             Microsoft::UI::Xaml::Controls::CheckBox checkBox{ nullptr };
         };
         std::vector<FlagCheckEntry> m_flagEntries;
+        // Re-entrancy guard for two-way checkbox ↔ textbox sync. Set true
+        // while the checkbox-click handler writes into the textbox, so the
+        // textbox's TextChanged handler skips its own checkbox refresh and
+        // doesn't ping-pong values back. Both code paths leave the value
+        // identical anyway, but the guard avoids redundant work.
+        bool m_suppressFlagSync = false;
 
         // Memory cell grid
         static constexpr int MemRows = 16;
