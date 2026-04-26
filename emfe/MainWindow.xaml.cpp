@@ -3978,13 +3978,17 @@ namespace winrt::emfe::implementation
     void MainWindow::SaveSettingsToStaging()
     {
         // Detect TargetOS change BEFORE we start writing values. Some plugins
-        // (notably mc68030) react to a TargetOS write by swapping which list
-        // is bound to a per-OS LIST setting (e.g. Mvme147ScsiDisks). The
-        // dialog-side cache m_pendingLists won't notice that swap, so we have
-        // to flush our staged list edits to the plugin under the OLD OS first
-        // (so the plugin's per-OS swap captures them on the right slot), then
-        // drop the cache so the next BuildSettingsContent / EnsureListStaged
-        // re-reads the new OS's list.
+        // (notably mc68030) react to a TargetOS write by swapping which value
+        // is bound to per-OS settings (Mvme147ScsiDisks LIST plus the CD-ROM
+        // path / SCSI ID strings). To make that work end-to-end:
+        //   (a) Flush list edits to the plugin under the OLD OS so the
+        //       plugin's per-OS swap captures them on the right slot, and
+        //       drop the dialog-side cache so EnsureListStaged refills it
+        //       from the new OS after the swap.
+        //   (b) Write all OTHER settings BEFORE writing TargetOS — the loop
+        //       order in m_settingControls would otherwise overwrite the
+        //       new OS's just-restored values with whatever the UI was still
+        //       showing from the old OS.
         std::string prevTargetOS, newTargetOS;
         bool targetOSChanging = false;
         for (auto& sc : m_settingControls) {
@@ -4003,7 +4007,7 @@ namespace winrt::emfe::implementation
             m_pendingLists.clear();
         }
 
-        for (auto& sc : m_settingControls) {
+        auto writeOne = [this](SettingUI const& sc) {
             std::string val;
             switch (sc.type) {
             case EMFE_SETTING_BOOL: {
@@ -4025,6 +4029,19 @@ namespace winrt::emfe::implementation
             }
             if (!val.empty())
                 m_plugin.emfe_set_setting(m_instance, sc.key.c_str(), val.c_str());
+        };
+
+        // Pass 1: every setting except TargetOS — captures the current OS's
+        // state into the plugin before the per-OS swap fires.
+        for (auto& sc : m_settingControls) {
+            if (sc.key == "TargetOS") continue;
+            writeOne(sc);
+        }
+        // Pass 2: TargetOS — plugin swaps active per-OS values to the new OS.
+        for (auto& sc : m_settingControls) {
+            if (sc.key != "TargetOS") continue;
+            writeOne(sc);
+            break;
         }
     }
 
