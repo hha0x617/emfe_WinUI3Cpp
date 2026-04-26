@@ -103,6 +103,10 @@ public:
         // before calling and falls back to "not pending".
         emfe_is_list_pending = reinterpret_cast<decltype(::emfe_is_list_pending)*>(
             ::GetProcAddress(m_hModule, "emfe_is_list_pending"));
+        // Optional export: per-register flag-bit decomposition for checkbox
+        // UI on flags registers. Fall back to plain hex display when absent.
+        emfe_get_register_flag_defs = reinterpret_cast<decltype(::emfe_get_register_flag_defs)*>(
+            ::GetProcAddress(m_hModule, "emfe_get_register_flag_defs"));
 
         #undef RESOLVE
         return true;
@@ -178,6 +182,7 @@ public:
         emfe_add_list_item = nullptr;
         emfe_remove_list_item = nullptr;
         emfe_is_list_pending = nullptr;
+        emfe_get_register_flag_defs = nullptr;
         emfe_save_settings = nullptr;
         emfe_load_settings = nullptr;
         emfe_set_data_dir = nullptr;
@@ -254,6 +259,7 @@ public:
     decltype(::emfe_add_list_item)*            emfe_add_list_item = nullptr;
     decltype(::emfe_remove_list_item)*         emfe_remove_list_item = nullptr;
     decltype(::emfe_is_list_pending)*          emfe_is_list_pending = nullptr;
+    decltype(::emfe_get_register_flag_defs)*   emfe_get_register_flag_defs = nullptr;
     decltype(::emfe_save_settings)*            emfe_save_settings = nullptr;
     decltype(::emfe_load_settings)*            emfe_load_settings = nullptr;
     decltype(::emfe_set_data_dir)*             emfe_set_data_dir = nullptr;

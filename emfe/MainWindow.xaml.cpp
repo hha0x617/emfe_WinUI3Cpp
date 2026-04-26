@@ -889,6 +889,51 @@ namespace winrt::emfe::implementation
                     m_regEntries.back().bitWidth = d.bit_width;
                     m_regEntries.back().type = d.type;
                     if (d.type == EMFE_REG_FLOAT) box.FontSize(11);
+
+                    // If this register has a flag-bit decomposition (and the
+                    // plugin supports the optional export), add a row of
+                    // CheckBoxes underneath the value box. Each checkbox
+                    // toggles a single bit of the parent register on click.
+                    if ((d.flags & EMFE_REG_FLAG_FLAGS) && m_plugin.emfe_get_register_flag_defs) {
+                        const EmfeRegFlagBitDef* bits = nullptr;
+                        int32_t nBits = m_plugin.emfe_get_register_flag_defs(
+                            m_instance, d.reg_id, &bits);
+                        if (nBits > 0 && bits) {
+                            auto flagRow = StackPanel();
+                            flagRow.Orientation(Orientation::Horizontal);
+                            flagRow.Spacing(8);
+                            flagRow.Margin({ 0, 0, 0, 4 });
+                            uint32_t regId = d.reg_id;
+                            bool readOnly = (d.flags & EMFE_REG_FLAG_READONLY) != 0;
+                            for (int32_t b = 0; b < nBits; b++) {
+                                auto chk = Controls::CheckBox();
+                                chk.Content(winrt::box_value(
+                                    winrt::to_hstring(bits[b].label ? bits[b].label : "?")));
+                                chk.IsThreeState(false);
+                                chk.MinWidth(0);
+                                chk.IsEnabled(!readOnly);
+                                if (auto fg = GetThemeBrush(L"ThemeForeground"))
+                                    chk.Foreground(fg);
+                                uint8_t bitIndex = bits[b].bit_index;
+                                chk.Click([this, regId, bitIndex, chk](auto&&, auto&&) {
+                                    if (m_plugin.emfe_get_state(m_instance) == EMFE_STATE_RUNNING)
+                                        return;
+                                    EmfeRegValue v{};
+                                    v.reg_id = regId;
+                                    m_plugin.emfe_get_registers(m_instance, &v, 1);
+                                    uint64_t mask = uint64_t{1} << bitIndex;
+                                    bool isOn = winrt::unbox_value_or<bool>(chk.IsChecked(), false);
+                                    if (isOn) v.value.u64 |= mask;
+                                    else      v.value.u64 &= ~mask;
+                                    m_plugin.emfe_set_registers(m_instance, &v, 1);
+                                    UpdateRegisters();
+                                });
+                                flagRow.Children().Append(chk);
+                                m_flagEntries.push_back({ regId, bitIndex, chk });
+                            }
+                            panel.Children().Append(flagRow);
+                        }
+                    }
                 }
                 RegGroupsContainer().Children().Append(panel);
             }
@@ -920,28 +965,26 @@ namespace winrt::emfe::implementation
             e.valueBox.Text(text);
         }
 
-        // Flag checkboxes are only populated for mc68030-style SR; skip
-        // when the current plugin didn't build any (e.g. mc6809 CC shown as
-        // a plain textbox instead of individual bit checkboxes).
+        // Flag checkboxes are populated by BuildRegisterPanel from the
+        // plugin's emfe_get_register_flag_defs. Read each parent register
+        // once, then assign each checkbox's IsChecked from the indexed bit.
         if (!m_flagEntries.empty()) {
-
-        // Update flag checkboxes from SR (mc68030-specific layout)
-        EmfeRegValue srVal{};
-        srVal.reg_id = 17;
-        m_plugin.emfe_get_registers(m_instance, &srVal, 1);
-        uint16_t sr = static_cast<uint16_t>(srVal.value.u64);
-        uint8_t ccr = sr & 0xFF;
-
-        for (size_t i = 0; i < m_flagEntries.size(); i++) {
-            auto& f = m_flagEntries[i];
-            if (i < 5) // X, N, Z, V, C
-                f.checkBox.IsChecked((ccr & f.bitMask) != 0);
-            else if (i == 5) // S (supervisor)
-                f.checkBox.IsChecked((sr & 0x2000) != 0);
-            else if (i == 6) // T (trace)
-                f.checkBox.IsChecked((sr & 0x8000) != 0);
+            std::vector<uint32_t> flagRegIds;
+            for (auto& f : m_flagEntries)
+                if (std::find(flagRegIds.begin(), flagRegIds.end(), f.regId) == flagRegIds.end())
+                    flagRegIds.push_back(f.regId);
+            std::vector<EmfeRegValue> reads(flagRegIds.size());
+            for (size_t i = 0; i < flagRegIds.size(); i++)
+                reads[i].reg_id = flagRegIds[i];
+            m_plugin.emfe_get_registers(m_instance, reads.data(),
+                                        static_cast<int32_t>(reads.size()));
+            std::unordered_map<uint32_t, uint64_t> regValues;
+            for (auto& r : reads) regValues[r.reg_id] = r.value.u64;
+            for (auto& f : m_flagEntries) {
+                uint64_t v = regValues[f.regId];
+                f.checkBox.IsChecked(((v >> f.bitIndex) & 1ULL) != 0);
+            }
         }
-        }  // end if (!m_flagEntries.empty())
 
         // Update cycles display
         int64_t cycles = m_plugin.emfe_get_cycle_count(m_instance);

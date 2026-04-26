@@ -100,9 +100,14 @@ namespace winrt::emfe::implementation
         };
         std::vector<RegUIEntry> m_regEntries;
 
-        // SR flag checkboxes
+        // Per-bit checkboxes on flags registers (e.g. SR's X/N/Z/V/C/S/T).
+        // Populated from emfe_get_register_flag_defs at BuildRegisterPanel
+        // time; Update reads the parent register and assigns IsChecked
+        // from the indexed bit, and the CheckBox click handler does the
+        // reverse (read-modify-write the parent register).
         struct FlagCheckEntry {
-            uint8_t bitMask;
+            uint32_t regId;
+            uint8_t  bitIndex;     // 0 = LSB
             Microsoft::UI::Xaml::Controls::CheckBox checkBox{ nullptr };
         };
         std::vector<FlagCheckEntry> m_flagEntries;
