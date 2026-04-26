@@ -914,25 +914,15 @@ namespace winrt::emfe::implementation
                                     winrt::to_hstring(bits[b].label ? bits[b].label : "?")));
                                 chk.IsThreeState(false);
                                 chk.MinWidth(0);
-                                chk.IsEnabled(!readOnly);
+                                // Start disabled — only the Edit button
+                                // unlocks editing. Mirrors how the value
+                                // textboxes start IsReadOnly = true.
+                                chk.IsEnabled(false);
                                 if (auto fg = GetThemeBrush(L"ThemeForeground"))
                                     chk.Foreground(fg);
-                                uint8_t bitIndex = bits[b].bit_index;
-                                chk.Click([this, regId, bitIndex, chk](auto&&, auto&&) {
-                                    if (m_plugin.emfe_get_state(m_instance) == EMFE_STATE_RUNNING)
-                                        return;
-                                    EmfeRegValue v{};
-                                    v.reg_id = regId;
-                                    m_plugin.emfe_get_registers(m_instance, &v, 1);
-                                    uint64_t mask = uint64_t{1} << bitIndex;
-                                    bool isOn = winrt::unbox_value_or<bool>(chk.IsChecked(), false);
-                                    if (isOn) v.value.u64 |= mask;
-                                    else      v.value.u64 &= ~mask;
-                                    m_plugin.emfe_set_registers(m_instance, &v, 1);
-                                    UpdateRegisters();
-                                });
+                                m_flagEntries.push_back({ regId, bits[b].bit_index, chk });
+                                (void)readOnly; // reserved for future per-register read-only handling
                                 flagRow.Children().Append(chk);
-                                m_flagEntries.push_back({ regId, bitIndex, chk });
                             }
                             panel.Children().Append(flagRow);
                         }
@@ -1747,28 +1737,35 @@ namespace winrt::emfe::implementation
             values.push_back(v);
         }
 
-        // Build SR from flag checkboxes (only relevant for mc68030 layout).
+        // Build flag-register values from the checkbox states. Group by
+        // RegId so a single read-modify-write writes all bits of e.g. SR
+        // at once. Reuses values[] entries when the same RegId already
+        // has an edited textbox in the values vector.
         if (!m_flagEntries.empty()) {
-            EmfeRegValue srVal{};
-            srVal.reg_id = 17; // SR
-            m_plugin.emfe_get_registers(m_instance, &srVal, 1);
-            uint16_t sr = static_cast<uint16_t>(srVal.value.u64);
-            uint8_t ccr = sr & 0xFF;
-            for (size_t i = 0; i < m_flagEntries.size(); i++) {
-                bool checked = m_flagEntries[i].checkBox.IsChecked().Value();
-                switch (i) {
-                    case 0: ccr = checked ? (ccr | 0x10) : (ccr & ~0x10); break; // X
-                    case 1: ccr = checked ? (ccr | 0x08) : (ccr & ~0x08); break; // N
-                    case 2: ccr = checked ? (ccr | 0x04) : (ccr & ~0x04); break; // Z
-                    case 3: ccr = checked ? (ccr | 0x02) : (ccr & ~0x02); break; // V
-                    case 4: ccr = checked ? (ccr | 0x01) : (ccr & ~0x01); break; // C
-                    case 5: sr = checked ? (sr | 0x2000) : (sr & ~0x2000); break; // S
-                    case 6: sr = checked ? (sr | 0x8000) : (sr & ~0x8000); break; // T
+            std::vector<uint32_t> flagRegIds;
+            for (auto& f : m_flagEntries)
+                if (std::find(flagRegIds.begin(), flagRegIds.end(), f.regId) == flagRegIds.end())
+                    flagRegIds.push_back(f.regId);
+            for (uint32_t regId : flagRegIds) {
+                EmfeRegValue rv{};
+                rv.reg_id = regId;
+                m_plugin.emfe_get_registers(m_instance, &rv, 1);
+                uint64_t v = rv.value.u64;
+                for (auto& f : m_flagEntries) {
+                    if (f.regId != regId) continue;
+                    bool isOn = winrt::unbox_value_or<bool>(f.checkBox.IsChecked(), false);
+                    uint64_t mask = uint64_t{1} << f.bitIndex;
+                    if (isOn) v |= mask;
+                    else      v &= ~mask;
                 }
+                rv.value.u64 = v;
+                // If the user also edited this register's textbox above,
+                // the flags supersede that — keep the last write.
+                auto it = std::find_if(values.begin(), values.end(),
+                    [regId](const EmfeRegValue& x) { return x.reg_id == regId; });
+                if (it != values.end()) *it = rv;
+                else values.push_back(rv);
             }
-            sr = (sr & 0xFF00) | ccr;
-            srVal.value.u64 = sr;
-            values.push_back(srVal);
         }
 
         if (!values.empty())
