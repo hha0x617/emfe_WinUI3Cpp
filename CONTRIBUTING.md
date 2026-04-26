@@ -55,6 +55,34 @@ Output lands under `emfe/x64/Release/`.  At runtime, drop
   `docs: ...`, `ci: ...`, `chore: ...`).
 - Body wrapped to 72 chars, focused on motivation and trade-offs.
 
+## WinUI 3 theming — code-behind windows
+
+WinUI 3's `Microsoft.UI.Xaml.Window` is **not** a `FrameworkElement`,
+so it cannot hold `RequestedTheme` itself. The theme lives on
+`Window.Content`'s root, and is **dropped on every Content swap** —
+the next render falls back to the system default (Light) until something
+re-applies the theme.
+
+To prevent this from silently breaking dark-themed dialogs that rebuild
+their content from code-behind (e.g. the Settings dialog rebuilds on
+every combo change), this codebase has the rule:
+
+> **Do not call `Window.Content(...)` directly. Always go through
+> `MainWindow::SetThemedWindowContent(window, root)`.**
+
+The helper does `window.Content(root)` followed by
+`ApplyThemeToWindow(window, m_isDark)`, so theme survives the swap.
+A grep for `\.Content\(` against `Microsoft::UI::Xaml::Window` instances
+should find zero direct call sites — anything that does is a regression.
+
+Related: `m_themeApplied` is a one-shot flag separate from `m_isDark`
+so the very first `ApplyTheme()` at startup is never short-circuited
+by the `(isDark == m_isDark)` early-return — `RequestedTheme` and
+`DwmSetWindowAttribute` need to be applied at least once before they
+can be skipped on subsequent no-op calls.
+
+See user memory `pitfall_winui3_theme_propagation.md` for the rationale.
+
 ## Reporting bugs / requesting features
 
 Use the issue templates in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
