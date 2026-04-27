@@ -16,6 +16,7 @@
 #include <format>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include "GitVersion.h"
 
 using namespace winrt;
@@ -284,20 +285,53 @@ namespace winrt::emfe::implementation
         ofs << content;
     }
 
+    // Returns the per-user plugin directory:
+    //   %LOCALAPPDATA%\emfe_WinUI3Cpp\plugins\
+    // Co-located with the per-user appsettings.json so the install dir
+    // can stay read-only (typical when emfe is installed under
+    // C:\Program Files\). Returns an empty path on failure.
+    static std::filesystem::path GetUserPluginsDir()
+    {
+        wchar_t* appData = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &appData)) && appData) {
+            auto p = std::filesystem::path(appData) / L"emfe_WinUI3Cpp" / L"plugins";
+            CoTaskMemFree(appData);
+            return p;
+        }
+        return {};
+    }
+
     std::vector<std::filesystem::path> MainWindow::ScanPlugins()
     {
+        // We scan two roots:
+        //   1. <emfe.exe>\plugins\           (system / installer-shipped, often r/o)
+        //   2. %LOCALAPPDATA%\emfe_WinUI3Cpp\plugins\ (per-user, always writable)
+        // The user dir wins on filename collisions so a downloaded plugin
+        // can override a stale system copy without admin rights.
         wchar_t exePath[MAX_PATH]{};
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-        auto pluginsDir = std::filesystem::path(exePath).parent_path() / L"plugins";
+        auto systemDir = std::filesystem::path(exePath).parent_path() / L"plugins";
+        auto userDir = GetUserPluginsDir();
 
-        std::vector<std::filesystem::path> pluginPaths;
-        if (std::filesystem::exists(pluginsDir)) {
-            for (auto& entry : std::filesystem::directory_iterator(pluginsDir)) {
+        // filename -> full path. Insertion order = scan order; reinsert
+        // from the user dir overwrites the system entry for the same file.
+        std::map<std::wstring, std::filesystem::path> byName;
+        auto scan = [&](const std::filesystem::path& dir) {
+            if (dir.empty() || !std::filesystem::exists(dir)) return;
+            std::error_code ec;
+            for (auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+                if (ec) break;
                 auto name = entry.path().filename().wstring();
                 if (name.starts_with(L"emfe_plugin_") && name.ends_with(L".dll"))
-                    pluginPaths.push_back(entry.path());
+                    byName[name] = entry.path();
             }
-        }
+        };
+        scan(systemDir);
+        scan(userDir);
+
+        std::vector<std::filesystem::path> pluginPaths;
+        pluginPaths.reserve(byName.size());
+        for (auto& kv : byName) pluginPaths.push_back(kv.second);
         std::sort(pluginPaths.begin(), pluginPaths.end());
         return pluginPaths;
     }
@@ -518,7 +552,7 @@ namespace winrt::emfe::implementation
     {
         auto pluginPaths = ScanPlugins();
         if (pluginPaths.empty()) {
-            SetStatus(L"No plugin DLLs found \u2014 place emfe_plugin_*.dll in the plugins\\ directory next to emfe.exe");
+            SetStatus(L"No plugin DLLs found \u2014 place emfe_plugin_*.dll in either the plugins\\ directory next to emfe.exe or %LOCALAPPDATA%\\emfe_WinUI3Cpp\\plugins\\");
             return;
         }
 
