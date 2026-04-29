@@ -2583,9 +2583,19 @@ namespace winrt::emfe::implementation
                 return;
             }
 
+            // Strip a leading byte-order mark (U+FEFF) before line-ending
+            // normalisation.  Some clipboard sources (VS Code with UTF-16
+            // BOM, certain web pages) include a BOM as the first wchar
+            // even on CF_UNICODETEXT, which Win32 hands back verbatim.
+            // Without this guard the BOM survives the wchar→char cast as
+            // 0xFF, hits the plugin's UART, and parses as a one-byte
+            // symbol that the Lisp/Forth REPL prints as "UNBOUND:".
+            // emfe_CsWPF doesn't need an equivalent because .NET's
+            // `Clipboard.GetText()` already strips the BOM internally.
+            size_t start = (!text.empty() && text[0] == 0xFEFF) ? 1 : 0;
             // Normalize line endings to LF (matches emfe_CsWPF).
-            normalized.reserve(text.size());
-            for (size_t k = 0; k < text.size(); ++k) {
+            normalized.reserve(text.size() - start);
+            for (size_t k = start; k < text.size(); ++k) {
                 wchar_t c = text[k];
                 if (c == L'\r') {
                     normalized.push_back(L'\n');
