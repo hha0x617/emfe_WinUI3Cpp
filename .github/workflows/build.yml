@@ -24,20 +24,11 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch submodules (emfe_plugins)
-        env:
-          SUBMODULE_READ_TOKEN: ${{ secrets.SUBMODULE_READ_TOKEN }}
         shell: bash
-        run: |
-          # Use a PAT for github.com clones so private upstream repos
-          # (emfe_plugins) are reachable.  Remove the secret once
-          # upstream is public — falls through to ambient credentials.
-          if [[ -n "${SUBMODULE_READ_TOKEN}" ]]; then
-            git config --global url."https://x-access-token:${SUBMODULE_READ_TOKEN}@github.com/".insteadOf "https://github.com/"
-          fi
-          # Non-recursive: we only need emfe_plugins/api/emfe_plugin.h.
-          # The inner submodules (em6809, Em68030_WinUI3Cpp) are not
-          # required to build the host.
-          git submodule update --init
+        # Non-recursive: we only need emfe_plugins/api/emfe_plugin.h.
+        # The inner submodules (em6809-core, Em68030_WinUI3Cpp) are
+        # not required to build the host.
+        run: git submodule update --init
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3.0.0
