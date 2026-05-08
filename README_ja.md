@@ -116,6 +116,12 @@ DLL スキャン:
 - [emfe_plugins/mc6809](https://github.com/hha0x617/emfe_plugins/tree/master/mc6809) — Motorola MC6809 プラグイン (Rust)
 - [emfe_CsWPF](https://github.com/hha0x617/emfe_CsWPF) — C# WPF フロントエンド (同等機能)
 
+## 貢献とポリシー
+
+- 貢献ワークフロー: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- 行動規範: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)（Contributor Covenant 2.1 準拠）
+- セキュリティ: [`SECURITY.md`](SECURITY.md)
+
 ## ライセンス
 
 Apache License 2.0 — 詳細は [LICENSE](LICENSE) を参照

@@ -88,6 +88,13 @@ See user memory `pitfall_winui3_theme_propagation.md` for the rationale.
 Use the issue templates in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
 Security vulnerabilities go through [`SECURITY.md`](SECURITY.md) instead.
 
+## Code of Conduct
+
+This project follows the [Contributor Covenant 2.1](CODE_OF_CONDUCT.md).
+By participating you are expected to uphold those standards.  Reports
+of unacceptable behaviour go to the contact address listed in the
+Code of Conduct.
+
 ## License
 
 By submitting a contribution you agree it will be licensed under the
