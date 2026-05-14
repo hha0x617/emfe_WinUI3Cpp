@@ -18,6 +18,7 @@
 #include <fstream>
 #include <map>
 #include "GitVersion.h"
+#include "KeyMapping.h"
 
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
@@ -3113,7 +3114,20 @@ namespace winrt::emfe::implementation
 
         SetThemedWindowContent(m_framebufferWindow, outerPanel);
 
-        // Input handlers
+        // Input handlers.
+        //
+        // Mouse moves/clicks always flow to the guest when the cursor is over
+        // m_fbGrid — the standalone em68030_WinUI3Cpp does the same, and the
+        // earlier capture-gate dropped every PointerMoved before the first
+        // click, so X never saw cursor motion.
+        //
+        // m_fbInputCaptured still controls KEYBOARD forwarding so the user
+        // can press Esc to release without the guest swallowing it, and acts
+        // as the "hide host cursor + take focus" trigger on first click.
+        //
+        // Button codes are Linux BTN_LEFT/RIGHT/MIDDLE so the guest's
+        // em68030input driver passes them via input_report_key() — the
+        // previous 0/1/2 codes failed kbit lookup and were silently dropped.
         m_fbGrid->PointerPressed([this](auto&&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
             if (!m_fbInputCaptured) {
                 m_fbInputCaptured = true;
@@ -3124,20 +3138,26 @@ namespace winrt::emfe::implementation
                 blankCursor.Close();
                 m_fbGrid->SetCursor(blankCursor);
                 m_framebufferWindow.Content().as<FrameworkElement>().Focus(FocusState::Programmatic);
-            } else {
-                auto props = e.GetCurrentPoint(*m_fbGrid).Properties();
-                int btn = props.IsLeftButtonPressed() ? 0 : props.IsRightButtonPressed() ? 1 : 2;
-                m_plugin.emfe_push_mouse_button(m_instance, btn, true);
             }
+            auto props = e.GetCurrentPoint(*m_fbGrid).Properties();
+            if (props.IsLeftButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_LEFT, true);
+            if (props.IsRightButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_RIGHT, true);
+            if (props.IsMiddleButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_MIDDLE, true);
         });
         m_fbGrid->PointerReleased([this](auto&&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
-            if (!m_fbInputCaptured) return;
             auto props = e.GetCurrentPoint(*m_fbGrid).Properties();
-            if (!props.IsLeftButtonPressed()) m_plugin.emfe_push_mouse_button(m_instance, 0, false);
-            if (!props.IsRightButtonPressed()) m_plugin.emfe_push_mouse_button(m_instance, 1, false);
+            if (!props.IsLeftButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_LEFT, false);
+            if (!props.IsRightButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_RIGHT, false);
+            if (!props.IsMiddleButtonPressed())
+                m_plugin.emfe_push_mouse_button(m_instance, ::emfe::LINUX_BTN_MIDDLE, false);
         });
         m_fbGrid->PointerMoved([this](auto&&, Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e) {
-            if (!m_fbInputCaptured || m_fbLastWidth == 0 || m_fbLastHeight == 0) return;
+            if (m_fbLastWidth == 0 || m_fbLastHeight == 0) return;
             auto pos = e.GetCurrentPoint(*m_fbGrid).Position();
             double gridW = m_fbGrid->ActualWidth(), gridH = m_fbGrid->ActualHeight();
             if (gridW <= 0 || gridH <= 0) return;
@@ -3164,15 +3184,15 @@ namespace winrt::emfe::implementation
                 e.Handled(true);
                 return;
             }
-            uint32_t vk = static_cast<uint32_t>(e.Key());
-            uint32_t sc = ::MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
-            if (sc != 0) { m_plugin.emfe_push_key(m_instance, sc, true); e.Handled(true); }
+            // MapVirtualKeyW(VK_TO_VSC) returns a PS/2 set-1 scan code; the
+            // guest em68030input driver expects Linux KEY_* codes instead.
+            uint16_t code = ::emfe::WindowsVkToLinuxKey(static_cast<int>(e.Key()));
+            if (code != 0) { m_plugin.emfe_push_key(m_instance, code, true); e.Handled(true); }
         });
         contentElement.KeyUp([this](auto&&, Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& e) {
             if (!m_fbInputCaptured) return;
-            uint32_t vk = static_cast<uint32_t>(e.Key());
-            uint32_t sc = ::MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
-            if (sc != 0) { m_plugin.emfe_push_key(m_instance, sc, false); e.Handled(true); }
+            uint16_t code = ::emfe::WindowsVkToLinuxKey(static_cast<int>(e.Key()));
+            if (code != 0) { m_plugin.emfe_push_key(m_instance, code, false); e.Handled(true); }
         });
 
         // Timer for frame refresh
@@ -3240,7 +3260,9 @@ namespace winrt::emfe::implementation
 
         m_fbStatusText.Text(std::format(L"{}x{} {}bpp  ${:08X}  {:.1f} fps",
             width, height, info.bpp, static_cast<uint32_t>(info.base_address), m_fbCurrentFps));
-        m_fbInputStatus.Text(m_fbInputCaptured ? L"Input: captured (Esc to release)" : L"Click framebuffer to capture input");
+        m_fbInputStatus.Text(m_fbInputCaptured
+            ? L"Keyboard: captured (Esc to release)"
+            : L"Click framebuffer to capture keyboard");
     }
 
     void MainWindow::ConvertToBgra(const EmfeFramebufferInfo& info, const uint8_t* src, uint8_t* dst, int dstStride)
