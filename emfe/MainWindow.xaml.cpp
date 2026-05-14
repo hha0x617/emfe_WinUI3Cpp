@@ -3065,6 +3065,7 @@ namespace winrt::emfe::implementation
             m_fbStatusBar = nullptr;
             m_fbLastWidth = m_fbLastHeight = m_fbLastBpp = 0;
             m_fbInputCaptured = false;
+            m_fbInitialSizeApplied = false;
         });
 
         // Build UI
@@ -3235,6 +3236,29 @@ namespace winrt::emfe::implementation
             m_fbLastWidth = info.width;
             m_fbLastHeight = info.height;
             m_fbLastBpp = info.bpp;
+        }
+
+        // Resize the framebuffer window so the image renders dot-by-dot
+        // (one guest pixel = one host physical pixel).  Done once on the
+        // first valid frame; the user can still resize manually afterwards.
+        // Reset by the window's Closed handler.
+        if (!m_fbInitialSizeApplied && m_framebufferWindow && width > 0 && height > 0) {
+            HWND hwnd = GetWindowHandle(m_framebufferWindow);
+            UINT dpi = hwnd ? ::GetDpiForWindow(hwnd) : 96;
+            double scale = dpi > 0 ? dpi / 96.0 : 1.0;
+
+            // Status bar height (DIP) + Win11 chrome (DIP): ~28 DIP for the
+            // status bar (TextBlock 12pt + 4+4 padding), ~32 DIP title bar,
+            // ~2 DIP horizontal border.  Multiply by DPI scale because window
+            // chrome itself scales with system DPI.
+            constexpr double statusBarDip = 28.0;
+            constexpr double titleBarDip  = 32.0;
+            constexpr double horizBorderDip = 2.0;
+
+            int outerW = width  + static_cast<int>(std::ceil(horizBorderDip * scale));
+            int outerH = height + static_cast<int>(std::ceil((statusBarDip + titleBarDip) * scale));
+            m_framebufferWindow.AppWindow().Resize({ outerW, outerH });
+            m_fbInitialSizeApplied = true;
         }
 
         int srcSize = static_cast<int>(info.stride) * height;
