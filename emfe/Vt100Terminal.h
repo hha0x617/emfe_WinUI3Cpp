@@ -65,6 +65,10 @@ public:
     /// DEC Cursor Key Mode (DECCKM): when true, arrow keys send ESC O x instead of ESC [ x
     bool GetApplicationCursorKeys() const { return m_applicationCursorKeys; }
 
+    /// Helper exposed for the file-local Encode/DecodeUtf8Row helpers.
+    /// Encodes a Unicode code point as a UTF-8 byte sequence and appends to `out`.
+    static void AppendUtf8(std::string& out, char32_t codepoint);
+
 private:
     // Parser state machine
     enum class State { Normal, Esc, Csi, EscParen, StringSeq };
@@ -73,8 +77,13 @@ private:
     int m_cols;
     int m_rows;
 
-    // Screen buffer: row-major, index = row * m_cols + col
-    std::vector<char> m_screen;
+    // Screen buffer: row-major, index = row * m_cols + col.
+    // Cells store decoded Unicode code points (char32_t) so that multi-byte
+    // UTF-8 input from the guest occupies exactly one cell.  Otherwise a single
+    // U+2500 (─) — three bytes in UTF-8 — would consume three terminal columns,
+    // breaking wrap math, and signed-char comparisons in ProcessNormal would
+    // additionally drop continuation bytes (0x80+) entirely.
+    std::vector<char32_t> m_screen;
 
     // Soft-wrap flags: true if this row is a continuation of the previous row
     // (auto-wrap at column limit, not a real newline from the guest).
@@ -117,13 +126,15 @@ private:
     // VT100 line drawing characters mapped from ASCII
     static const std::unordered_map<char, char32_t> s_lineDrawingMap;
 
-    // Helper to encode a Unicode code point as a UTF-8 sequence and append to a string
-    static void AppendUtf8(std::string& out, char32_t codepoint);
-
-    // Normal character processing
-    void ProcessNormal(char ch);
-    void PutChar(char ch);
+    // Normal character processing (operates on decoded Unicode code points).
+    void ProcessNormal(char32_t ch);
+    void PutChar(char32_t ch);
     void LineFeed();
+
+    // UTF-8 decoder state for the Write(char) byte stream from the guest.
+    // _utf8Remaining > 0 while a multi-byte sequence is being accumulated.
+    int m_utf8Remaining = 0;
+    uint32_t m_utf8CodePoint = 0;
 
     // ESC sequence processing
     void ProcessEsc(char ch);
@@ -158,6 +169,6 @@ private:
     void Reset();
 
     // Screen cell access helpers
-    char& ScreenAt(int row, int col) { return m_screen[row * m_cols + col]; }
-    char ScreenAt(int row, int col) const { return m_screen[row * m_cols + col]; }
+    char32_t& ScreenAt(int row, int col) { return m_screen[row * m_cols + col]; }
+    char32_t ScreenAt(int row, int col) const { return m_screen[row * m_cols + col]; }
 };

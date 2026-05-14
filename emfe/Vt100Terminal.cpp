@@ -82,9 +82,77 @@ Vt100Terminal::Vt100Terminal(int cols, int rows, int maxScrollback)
 {
     m_scrollback.resize(m_maxScrollback > 0 ? m_maxScrollback : 1);
     m_scrollbackSoftWrap.resize(m_scrollback.size(), false);
-    m_screen.resize(rows * cols, ' ');
+    m_screen.resize(rows * cols, U' ');
     m_softWrap.resize(rows, false);
 }
+
+// ============================================================================
+// Local helpers for converting a screen row to / from a UTF-8 scrollback line.
+// The scrollback is stored as std::vector<std::string> (UTF-8) so we encode
+// codepoint cells on save and decode the bytes back into cells on restore.
+// ============================================================================
+
+namespace {
+
+std::string EncodeRowToUtf8(const std::vector<char32_t>& screen, int cols, int row)
+{
+    std::string out;
+    out.reserve(static_cast<size_t>(cols) * 3);
+    int base = row * cols;
+    for (int c = 0; c < cols; c++)
+        Vt100Terminal::AppendUtf8(out, screen[base + c]);
+    return out;
+}
+
+// Decode a UTF-8 byte string into char32_t cells, up to `capacity` cells.
+// Returns the number of cells written.  Invalid sequences yield U+FFFD.
+int DecodeUtf8Row(const std::string& line, char32_t* dst, int capacity)
+{
+    int written = 0;
+    int remaining = 0;
+    uint32_t cp = 0;
+    for (unsigned char b : line)
+    {
+        if (written >= capacity) break;
+        if (remaining > 0)
+        {
+            if ((b & 0xC0) == 0x80)
+            {
+                cp = (cp << 6) | (b & 0x3F);
+                if (--remaining == 0)
+                    dst[written++] = static_cast<char32_t>(cp);
+                continue;
+            }
+            // Bad continuation: emit replacement and fall through to reparse.
+            dst[written++] = U'�';
+            remaining = 0;
+            if (written >= capacity) break;
+        }
+        if (b < 0x80)
+        {
+            dst[written++] = static_cast<char32_t>(b);
+        }
+        else if ((b & 0xE0) == 0xC0)
+        {
+            cp = b & 0x1F;  remaining = 1;
+        }
+        else if ((b & 0xF0) == 0xE0)
+        {
+            cp = b & 0x0F;  remaining = 2;
+        }
+        else if ((b & 0xF8) == 0xF0)
+        {
+            cp = b & 0x07;  remaining = 3;
+        }
+        else
+        {
+            dst[written++] = U'�';
+        }
+    }
+    return written;
+}
+
+} // namespace
 
 // ============================================================================
 // ResizeScrollback
@@ -131,7 +199,7 @@ void Vt100Terminal::Resize(int newCols, int newRows)
     if (newCols == m_cols && newRows == m_rows) return;
 
     int rowDiff = newRows - m_rows; // positive = growing, negative = shrinking
-    std::vector<char> newScreen(newRows * newCols, ' ');
+    std::vector<char32_t> newScreen(newRows * newCols, U' ');
 
     if (rowDiff < 0)
     {
@@ -145,7 +213,7 @@ void Vt100Terminal::Resize(int newCols, int newRows)
             bool blank = true;
             for (int c = 0; c < m_cols; c++)
             {
-                if (ScreenAt(r, c) != ' ') { blank = false; break; }
+                if (ScreenAt(r, c) != U' ') { blank = false; break; }
             }
             if (!blank) break;
             trailingBlanks++;
@@ -156,19 +224,15 @@ void Vt100Terminal::Resize(int newCols, int newRows)
         int blanksConsumed = std::min(removableBlanks, rowsToRemove);
         int remainingToRemove = rowsToRemove - blanksConsumed;
 
-        // Push top lines to scrollback (anchor bottom of display)
+        // Push top lines to scrollback (anchor bottom of display).  Encode
+        // codepoint cells back to UTF-8 since scrollback is stored as bytes.
         if (remainingToRemove > 0 && m_maxScrollback > 0)
         {
             for (int r = 0; r < remainingToRemove; r++)
             {
-                std::string line(m_cols, ' ');
-                for (int c = 0; c < m_cols; c++)
-                    line[c] = ScreenAt(r, c);
-                auto end = line.find_last_not_of(' ');
-                if (end != std::string::npos)
-                    line.resize(end + 1);
-                else
-                    line.clear();
+                std::string line = EncodeRowToUtf8(m_screen, m_cols, r);
+                while (!line.empty() && line.back() == ' ')
+                    line.pop_back();
 
                 int writeIdx = (m_scrollbackHead + m_scrollbackCount) % m_maxScrollback;
                 m_scrollback[writeIdx] = std::move(line);
@@ -202,9 +266,7 @@ void Vt100Terminal::Resize(int newCols, int newRows)
             // Older lines at top, newer lines adjacent to existing content
             int scrollIdx = (m_scrollbackHead + m_scrollbackCount - fromScrollback + i) % m_maxScrollback;
             const std::string& line = m_scrollback[scrollIdx];
-            int len = std::min(static_cast<int>(line.size()), newCols);
-            for (int c = 0; c < len; c++)
-                newScreen[i * newCols + c] = line[c];
+            DecodeUtf8Row(line, &newScreen[i * newCols], newCols);
         }
         m_scrollbackCount -= fromScrollback;
 
@@ -216,7 +278,7 @@ void Vt100Terminal::Resize(int newCols, int newRows)
             for (int c = 0; c < copyCols; c++)
                 newScreen[(destStartRow + r) * newCols + c] = ScreenAt(r, c);
 
-        // Remaining rows at bottom are already blank (initialized to ' ')
+        // Remaining rows at bottom are already blank (initialized to U' ')
         m_cursorRow = std::clamp(m_cursorRow + fromScrollback, 0, newRows - 1);
     }
     else
@@ -243,23 +305,88 @@ void Vt100Terminal::Resize(int newCols, int newRows)
 
 void Vt100Terminal::Write(char ch)
 {
+    // UTF-8 decode the incoming byte stream from the guest before dispatching
+    // to the parser.  The previous code dropped every byte with bit 7 set
+    // because `if (ch >= ' ')` in ProcessNormal sign-extends a signed char,
+    // and on top of that a single multi-byte UTF-8 character would occupy
+    // multiple cells which breaks cursor and wrap math.  Mirror the C# port
+    // in Em68030_CsWPF/Em68030/Views/Vt100Terminal.cs:Write.
+    unsigned int b = static_cast<unsigned char>(ch);
+    char32_t cp;
+    if (m_utf8Remaining > 0)
+    {
+        if ((b & 0xC0) == 0x80)
+        {
+            m_utf8CodePoint = (m_utf8CodePoint << 6) | (b & 0x3F);
+            if (--m_utf8Remaining > 0)
+                return;
+            cp = static_cast<char32_t>(m_utf8CodePoint);
+        }
+        else
+        {
+            // Bad continuation byte: abandon the in-progress sequence and
+            // reparse this byte as if it were fresh.
+            m_utf8Remaining = 0;
+            // fall through to the leading-byte block below
+            goto reparse;
+        }
+    }
+    else
+    {
+    reparse:
+        if (b < 0x80)
+        {
+            cp = static_cast<char32_t>(b);
+        }
+        else if ((b & 0xE0) == 0xC0)
+        {
+            m_utf8CodePoint = b & 0x1F;
+            m_utf8Remaining = 1;
+            return;
+        }
+        else if ((b & 0xF0) == 0xE0)
+        {
+            m_utf8CodePoint = b & 0x0F;
+            m_utf8Remaining = 2;
+            return;
+        }
+        else if ((b & 0xF8) == 0xF0)
+        {
+            m_utf8CodePoint = b & 0x07;
+            m_utf8Remaining = 3;
+            return;
+        }
+        else
+        {
+            // Stray 0x80-0xBF or 0xF8+ — surface as replacement char so we
+            // don't silently swallow a torn stream.
+            cp = U'�';
+        }
+    }
+
     switch (m_state)
     {
         case State::Normal:
-            ProcessNormal(ch);
+            ProcessNormal(cp);
             break;
         case State::Esc:
-            ProcessEsc(ch);
+            // ESC sequences are pure 7-bit ASCII; if a stray non-ASCII codepoint
+            // arrives here it's almost certainly garbage from a torn stream —
+            // drop it and stay in Esc.  Otherwise dispatch on the low byte.
+            if (cp < 0x80)
+                ProcessEsc(static_cast<char>(cp));
             break;
         case State::Csi:
-            ProcessCsi(ch);
+            if (cp < 0x80)
+                ProcessCsi(static_cast<char>(cp));
             break;
         case State::EscParen:
             // ESC ( or ESC ) -- character set designation, consume one more char
             m_state = State::Normal;
             break;
         case State::StringSeq:
-            ProcessStringSeq(ch);
+            if (cp < 0x80)
+                ProcessStringSeq(static_cast<char>(cp));
             break;
     }
 }
@@ -277,7 +404,7 @@ void Vt100Terminal::Write(const std::string& s)
 std::string Vt100Terminal::Render() const
 {
     std::string result;
-    result.reserve(m_rows * (m_cols * 3 + 1)); // Up to 3 bytes per char (UTF-8) + newlines
+    result.reserve(m_rows * (m_cols * 3 + 1)); // Up to 3 bytes per cell (UTF-8) + newlines
     for (int r = 0; r < m_rows; r++)
     {
         // Insert newline before this row, unless it's a soft-wrap continuation
@@ -285,17 +412,17 @@ std::string Vt100Terminal::Render() const
 
         // Trim trailing spaces, but keep cursor row consistent with RenderWithCursor
         int lastCol = m_cols - 1;
-        while (lastCol >= 0 && ScreenAt(r, lastCol) == ' ') lastCol--;
+        while (lastCol >= 0 && ScreenAt(r, lastCol) == U' ') lastCol--;
         if (r == m_cursorRow && m_cursorCol > lastCol) lastCol = m_cursorCol;
         for (int c = 0; c <= lastCol; c++)
         {
-            char ch = ScreenAt(r, c);
+            char32_t ch = ScreenAt(r, c);
             // Use non-breaking space at cursor position to prevent TextBox
             // from collapsing trailing spaces at wrap boundaries (jitter fix)
-            if (r == m_cursorRow && c == m_cursorCol && ch == ' ')
+            if (r == m_cursorRow && c == m_cursorCol && ch == U' ')
                 AppendUtf8(result, U'\u00A0');
             else
-                result.push_back(ch);
+                AppendUtf8(result, ch);
         }
     }
     return result;
@@ -315,19 +442,15 @@ std::string Vt100Terminal::RenderWithCursor() const
 
         // Trim trailing spaces, but ensure cursor column is included
         int lastCol = m_cols - 1;
-        while (lastCol >= 0 && ScreenAt(r, lastCol) == ' ') lastCol--;
+        while (lastCol >= 0 && ScreenAt(r, lastCol) == U' ') lastCol--;
         if (r == m_cursorRow && m_cursorCol > lastCol) lastCol = m_cursorCol;
 
         for (int c = 0; c <= lastCol; c++)
         {
             if (r == m_cursorRow && c == m_cursorCol)
-            {
                 AppendUtf8(result, U'\u2588');
-            }
             else
-            {
-                result.push_back(ScreenAt(r, c));
-            }
+                AppendUtf8(result, ScreenAt(r, c));
         }
     }
     return result;
@@ -358,15 +481,15 @@ std::string Vt100Terminal::RenderFull() const
                 result.push_back('\n');
         }
         int lastCol = m_cols - 1;
-        while (lastCol >= 0 && ScreenAt(r, lastCol) == ' ') lastCol--;
+        while (lastCol >= 0 && ScreenAt(r, lastCol) == U' ') lastCol--;
         if (r == m_cursorRow && m_cursorCol > lastCol) lastCol = m_cursorCol;
         for (int c = 0; c <= lastCol; c++)
         {
-            char ch = ScreenAt(r, c);
-            if (r == m_cursorRow && c == m_cursorCol && ch == ' ')
+            char32_t ch = ScreenAt(r, c);
+            if (r == m_cursorRow && c == m_cursorCol && ch == U' ')
                 AppendUtf8(result, U'\u00A0');
             else
-                result.push_back(ch);
+                AppendUtf8(result, ch);
         }
     }
     return result;
@@ -397,14 +520,14 @@ std::string Vt100Terminal::RenderFullWithCursor() const
                 result.push_back('\n');
         }
         int lastCol = m_cols - 1;
-        while (lastCol >= 0 && ScreenAt(r, lastCol) == ' ') lastCol--;
+        while (lastCol >= 0 && ScreenAt(r, lastCol) == U' ') lastCol--;
         if (r == m_cursorRow && m_cursorCol > lastCol) lastCol = m_cursorCol;
         for (int c = 0; c <= lastCol; c++)
         {
             if (r == m_cursorRow && c == m_cursorCol)
                 AppendUtf8(result, U'\u2588');
             else
-                result.push_back(ScreenAt(r, c));
+                AppendUtf8(result, ScreenAt(r, c));
         }
     }
     return result;
@@ -414,83 +537,55 @@ std::string Vt100Terminal::RenderFullWithCursor() const
 // Normal character processing
 // ============================================================================
 
-void Vt100Terminal::ProcessNormal(char ch)
+void Vt100Terminal::ProcessNormal(char32_t ch)
 {
     switch (ch)
     {
-        case '\x1B': // ESC
+        case U'\x1B': // ESC
             m_state = State::Esc;
             break;
-        case '\r': // CR
+        case U'\r': // CR
             m_cursorCol = 0;
             m_dirty = true;
             break;
-        case '\n': // LF -- also do CR (the write bypass skips tty ONLCR processing)
+        case U'\n': // LF -- also do CR (the write bypass skips tty ONLCR processing)
             m_cursorCol = 0;
             LineFeed();
             m_softWrap[m_cursorRow] = false; // Real newline, not a continuation
             break;
-        case '\b': // BS
+        case U'\b': // BS
             if (m_cursorCol > 0) m_cursorCol--;
             m_dirty = true;
             break;
-        case '\t': // TAB
+        case U'\t': // TAB
             m_cursorCol = std::min((m_cursorCol / 8 + 1) * 8, m_cols - 1);
             m_dirty = true;
             break;
-        case '\x07': // BEL
+        case U'\x07': // BEL
             break;
-        case '\x0E': // SO -- Switch to alternate character set
+        case U'\x0E': // SO -- Switch to alternate character set
             m_alternateCharset = true;
             break;
-        case '\x0F': // SI -- Switch to standard character set
+        case U'\x0F': // SI -- Switch to standard character set
             m_alternateCharset = false;
             break;
         default:
-            if (ch >= ' ')
+            if (ch >= U' ')
                 PutChar(ch);
             break;
     }
 }
 
-void Vt100Terminal::PutChar(char ch)
+void Vt100Terminal::PutChar(char32_t ch)
 {
-    // Map line-drawing characters when in alternate charset
-    // Since we store char (not wchar_t), line-drawing Unicode chars cannot be
-    // stored directly in the screen buffer. We store a placeholder '?' for
-    // line drawing in the cell and handle rendering separately.
-    // However, for simplicity and faithful port: we keep the char buffer and
-    // let the Render methods output plain chars. If you need full Unicode
-    // line drawing in the screen buffer, switch m_screen to std::vector<char32_t>.
-    if (m_alternateCharset)
+    // Map DEC line-drawing characters when in alternate charset.  The cells
+    // are now char32_t so we can store the actual Unicode line-drawing
+    // glyphs from s_lineDrawingMap directly.
+    if (m_alternateCharset && ch < 0x80)
     {
-        auto it = s_lineDrawingMap.find(ch);
+        auto it = s_lineDrawingMap.find(static_cast<char>(ch));
         if (it != s_lineDrawingMap.end())
-        {
-            // Store a substitute ASCII approximation in the cell
-            // (Full Unicode rendering is handled at the UI layer)
-            switch (ch)
-            {
-                case 'j': ch = '+'; break; // corner
-                case 'k': ch = '+'; break; // corner
-                case 'l': ch = '+'; break; // corner
-                case 'm': ch = '+'; break; // corner
-                case 'n': ch = '+'; break; // cross
-                case 'q': ch = '-'; break; // horizontal
-                case 't': ch = '+'; break; // tee
-                case 'u': ch = '+'; break; // tee
-                case 'v': ch = '+'; break; // tee
-                case 'w': ch = '+'; break; // tee
-                case 'x': ch = '|'; break; // vertical
-                case 'a': ch = '#'; break; // shade
-                case 'f': ch = 'o'; break; // degree
-                case 'g': ch = '+'; break; // plus-minus
-                case '~': ch = '.'; break; // middle dot
-                case 'y': ch = '<'; break; // less-equal
-                case 'z': ch = '>'; break; // greater-equal
-                default: break;
-            }
-        }
+            ch = it->second;
     }
 
     if (m_cursorCol >= m_cols)
@@ -901,19 +996,14 @@ void Vt100Terminal::ScrollUp(int n)
 {
     for (int i = 0; i < n; i++)
     {
-        // Save the top line to scrollback ring buffer before it's overwritten
+        // Save the top line to scrollback ring buffer before it's overwritten.
+        // Encode codepoint cells to UTF-8 since the scrollback ring stores
+        // std::string (bytes).
         if (m_scrollTop == 0 && m_maxScrollback > 0)
         {
-            std::string line(m_cols, ' ');
-            for (int c = 0; c < m_cols; c++)
-                line[c] = ScreenAt(m_scrollTop, c);
-
-            // Trim trailing spaces
-            auto end = line.find_last_not_of(' ');
-            if (end != std::string::npos)
-                line.erase(end + 1);
-            else
-                line.clear();
+            std::string line = EncodeRowToUtf8(m_screen, m_cols, m_scrollTop);
+            while (!line.empty() && line.back() == ' ')
+                line.pop_back();
 
             int writeIdx = (m_scrollbackHead + m_scrollbackCount) % m_maxScrollback;
             m_scrollback[writeIdx] = std::move(line);
@@ -984,6 +1074,8 @@ void Vt100Terminal::Reset()
     m_cursorCol = 0;
     m_scrollTop = 0;
     m_scrollBottom = m_rows - 1;
+    m_utf8Remaining = 0;
+    m_utf8CodePoint = 0;
     m_alternateCharset = false;
     m_state = State::Normal;
     m_dirty = true;
