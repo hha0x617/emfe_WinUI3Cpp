@@ -116,6 +116,7 @@
   </ItemGroup>
   <!-- Source Files -->
   <ItemGroup>
+    <ClInclude Include="KeyMapping.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PluginLoader.h" />
     <ClInclude Include="Vt100Terminal.h" />
