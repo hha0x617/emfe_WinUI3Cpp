@@ -228,6 +228,10 @@ namespace winrt::emfe::implementation
         Microsoft::UI::Xaml::DispatcherTimer m_fbTimer{ nullptr };
         uint32_t m_fbLastWidth = 0, m_fbLastHeight = 0, m_fbLastBpp = 0;
         bool m_fbInputCaptured = false;
+        // True once the framebuffer window has been resized to match the first
+        // observed framebuffer dimensions (dot-by-dot client area).  Reset on
+        // window close so a subsequent open resizes again.
+        bool m_fbInitialSizeApplied = false;
         int m_fbFrameCount = 0;
         std::chrono::steady_clock::time_point m_fbFpsStart;
         double m_fbCurrentFps = 0;
