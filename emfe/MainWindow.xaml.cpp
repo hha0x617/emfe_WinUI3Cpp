@@ -2206,6 +2206,18 @@ namespace winrt::emfe::implementation
                 }
             }
 
+            // Ctrl+Shift+C / V / A → host clipboard actions.  Runs BEFORE the
+            // plain Ctrl+letter path below so that the Shift fork wins; the
+            // un-shifted form keeps sending the control byte to the guest
+            // (Ctrl+C = SIGINT, Ctrl+V = readline quoted-insert, Ctrl+A =
+            // beginning-of-line).  Mirrors the Ctrl+Shift+C/V convention used
+            // by Windows Terminal, gnome-terminal, Konsole and VS Code.
+            if (ctrlDown && shiftDown) {
+                if (key == VirtualKey::C) { DoConsoleCopy();      args.Handled(true); return; }
+                if (key == VirtualKey::V) { DoConsolePaste();     args.Handled(true); return; }
+                if (key == VirtualKey::A) { DoConsoleSelectAll(); args.Handled(true); return; }
+            }
+
             if (!m_instance) return;
 
             // Arrow keys send escape sequences (DECCKM aware)
@@ -2475,19 +2487,19 @@ namespace winrt::emfe::implementation
         auto flyout = Controls::MenuFlyout();
 
         auto itemCopy = Controls::MenuFlyoutItem();
-        itemCopy.Text(L"Copy (Ctrl+C)");
+        itemCopy.Text(L"Copy (Ctrl+Shift+C)");
         itemCopy.Click([this](auto&&, auto&&) { DoConsoleCopy(); });
         flyout.Items().Append(itemCopy);
 
         auto itemPaste = Controls::MenuFlyoutItem();
-        itemPaste.Text(L"Paste");
+        itemPaste.Text(L"Paste (Ctrl+Shift+V)");
         itemPaste.Click([this](auto&&, auto&&) { DoConsolePaste(); });
         flyout.Items().Append(itemPaste);
 
         flyout.Items().Append(Controls::MenuFlyoutSeparator());
 
         auto itemSelectAll = Controls::MenuFlyoutItem();
-        itemSelectAll.Text(L"Select All (Ctrl+A)");
+        itemSelectAll.Text(L"Select All (Ctrl+Shift+A)");
         itemSelectAll.Click([this](auto&&, auto&&) { DoConsoleSelectAll(); });
         flyout.Items().Append(itemSelectAll);
 
