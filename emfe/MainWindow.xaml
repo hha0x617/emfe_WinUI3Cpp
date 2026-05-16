@@ -139,10 +139,10 @@
                 <MenuFlyoutItem Text="Full Reset" Click="OnFullReset"/>
             </MenuBarItem>
             <MenuBarItem Title="View">
-                <MenuFlyoutItem Text="Console" Click="OnToggleConsole"/>
+                <MenuFlyoutItem Text="Serial Console" Click="OnToggleConsole"/>
+                <MenuFlyoutItem x:Name="MenuFramebuffer" Text="Framebuffer..." Click="OnOpenFramebuffer"/>
                 <MenuFlyoutItem Text="Breakpoints..." Click="OnOpenBreakpoints"/>
                 <MenuFlyoutItem x:Name="MenuCallStack" Text="Call Stack..." Click="OnOpenCallStack"/>
-                <MenuFlyoutItem x:Name="MenuFramebuffer" Text="Framebuffer..." Click="OnOpenFramebuffer"/>
             </MenuBarItem>
             <MenuBarItem Title="Settings">
                 <MenuFlyoutItem Text="Emulator Settings..." Click="OnOpenSettings"/>
