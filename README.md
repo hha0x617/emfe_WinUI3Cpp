@@ -26,8 +26,8 @@ disassembly view, memory dump, and console window.
 - Memory dump: 16×16 cell grid + ASCII column + edit mode
 - Execution control: Step (F10), Step Over (F11), Step Out (Shift+F11),
   Run (F5), Stop (Shift+F5), Reset, Full Reset
-- Console window: separate window, green/black colour scheme, auto-show,
-  keyboard input
+- Serial Console window: separate window, green/black colour scheme,
+  auto-show, keyboard input
 - Settings dialog: plugin-supplied setting defs rendered as dynamic UI
 - Dark theme (including title bar via `DWM_USE_IMMERSIVE_DARK_MODE`)
 
@@ -117,7 +117,7 @@ DLL discovery:
 1. Run `emfe.exe`
 2. **File → Open ELF...** (Ctrl+E) or **Open S-Record...** (Ctrl+S) to load
    a program
-3. **View → Console** to open the console window (auto-shown as well)
+3. **View → Serial Console** to open the serial console window (auto-shown as well)
 4. **Run (F5)** / **Step (F10)** to execute
 5. **Double-click a disassembly line** to toggle a breakpoint
 6. **Settings → Emulator Settings...** to open the settings dialog
