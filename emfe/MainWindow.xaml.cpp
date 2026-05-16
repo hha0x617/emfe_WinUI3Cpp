@@ -2242,7 +2242,15 @@ namespace winrt::emfe::implementation
             // intercepted here so the TextBox doesn't swallow it).
             char ch = 0;
             if (key == VirtualKey::Enter) ch = '\n';
-            else if (key == VirtualKey::Back) ch = '\b';
+            // Backspace key → DEL (0x7F), not BS (0x08).  Modern Linux/BSD
+            // ttys (agetty's login prompt, vi insert mode, etc.) take their
+            // erase character from termios `VERASE`, which defaults to DEL.
+            // bash + readline binds both 0x7F and 0x08 to backward-delete-char
+            // so the shell prompt works either way, but agetty does not, and
+            // would otherwise echo the BS byte as literal "^H".  Ctrl+H still
+            // sends 0x08 via the Ctrl+letter path below, so users who
+            // specifically need BS retain access to it.
+            else if (key == VirtualKey::Back) ch = 0x7F;
             else if (key == VirtualKey::Escape) ch = 0x1B;
             else if (key == VirtualKey::Tab) ch = '\t';
             else if (key == VirtualKey::Space) ch = ' ';   // guard: some TextBox configs eat Space before CharacterReceived
