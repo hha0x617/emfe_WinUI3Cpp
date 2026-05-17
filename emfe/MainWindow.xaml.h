@@ -225,7 +225,13 @@ namespace winrt::emfe::implementation
         Microsoft::UI::Xaml::Controls::StackPanel m_fbStatusBar{ nullptr };
         winrt::com_ptr<CursorGrid> m_fbGrid;
         Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap m_fbBitmap{ nullptr };
-        Microsoft::UI::Xaml::DispatcherTimer m_fbTimer{ nullptr };
+        // Use the low-level DispatcherQueueTimer (not the XAML DispatcherTimer).
+        // The XAML variant piggybacks on the render scheduler and silently
+        // skips ticks when the UI thread is doing layout/dialog work, which
+        // dropped the framebuffer refresh from the 33 ms (30 Hz) target to a
+        // measured ~20 Hz.  DispatcherQueueTimer is what em68030 standalone
+        // and our own console-render timer use, and holds 30 Hz under load.
+        Microsoft::UI::Dispatching::DispatcherQueueTimer m_fbTimer{ nullptr };
         uint32_t m_fbLastWidth = 0, m_fbLastHeight = 0, m_fbLastBpp = 0;
         bool m_fbInputCaptured = false;
         // True once the framebuffer window has been resized to match the first
