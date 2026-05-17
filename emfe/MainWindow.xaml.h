@@ -237,6 +237,10 @@ namespace winrt::emfe::implementation
         double m_fbCurrentFps = 0;
         void RefreshFramebufferFrame();
         void ConvertToBgra(const EmfeFramebufferInfo& info, const uint8_t* src, uint8_t* dst, int dstStride);
+        // Framebuffer paste (Ctrl+Shift+V): read clipboard text, release Ctrl/Shift in
+        // the guest, then synthesise Shift+key+release for each character via the
+        // plugin's emfe_push_key.  US layout assumed.
+        void DoFramebufferPaste();
         void NavigateDisassemblyTo(uint32_t address);
         void UpdateBoardTypeText(winrt::hstring cpuName = L"");
         uint32_t m_lastStopAddress = 0;

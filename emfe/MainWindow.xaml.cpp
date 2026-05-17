@@ -3205,6 +3205,15 @@ namespace winrt::emfe::implementation
                 e.Handled(true);
                 return;
             }
+            // Ctrl+Shift+V: paste clipboard text as synthetic key events.  Must
+            // come before the normal VK→KEY dispatch so V is not also forwarded.
+            if (e.Key() == Windows::System::VirtualKey::V &&
+                (::GetKeyState(VK_CONTROL) & 0x8000) &&
+                (::GetKeyState(VK_SHIFT)   & 0x8000)) {
+                DoFramebufferPaste();
+                e.Handled(true);
+                return;
+            }
             // MapVirtualKeyW(VK_TO_VSC) returns a PS/2 set-1 scan code; the
             // guest em68030input driver expects Linux KEY_* codes instead.
             uint16_t code = ::emfe::WindowsVkToLinuxKey(static_cast<int>(e.Key()));
@@ -3307,6 +3316,55 @@ namespace winrt::emfe::implementation
         m_fbInputStatus.Text(m_fbInputCaptured
             ? L"Keyboard: captured (Esc to release)"
             : L"Click framebuffer to capture keyboard");
+    }
+
+    void MainWindow::DoFramebufferPaste()
+    {
+        if (!m_instance || !m_plugin.IsLoaded()) return;
+
+        // Read the clipboard synchronously via Win32.  WinRT's DataPackageView
+        // / GetTextAsync is unreliable in unpackaged WinUI 3 apps (see the
+        // same approach used by DoConsolePaste).
+        std::wstring text;
+        {
+            HWND owner = m_framebufferWindow ? GetWindowHandle(m_framebufferWindow) : nullptr;
+            if (!::OpenClipboard(owner)) return;
+            HANDLE h = ::GetClipboardData(CF_UNICODETEXT);
+            if (!h) { ::CloseClipboard(); return; }
+            auto p = static_cast<const wchar_t*>(::GlobalLock(h));
+            if (!p) { ::CloseClipboard(); return; }
+            text.assign(p);
+            ::GlobalUnlock(h);
+            ::CloseClipboard();
+        }
+        if (text.empty()) return;
+
+        // The user has Ctrl+Shift physically held down — those were already
+        // forwarded to the guest as KEY_LEFTCTRL/KEY_LEFTSHIFT down events.
+        // Release them so each pasted character isn't interpreted with the
+        // Ctrl+Shift modifier still active.
+        constexpr uint16_t KEY_LEFTSHIFT = 42;
+        constexpr uint16_t KEY_LEFTCTRL  = 29;
+        m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, false);
+        m_plugin.emfe_push_key(m_instance, KEY_LEFTCTRL,  false);
+
+        for (wchar_t wc : text) {
+            // Skip BOM (some clipboard sources prepend U+FEFF on CF_UNICODETEXT).
+            if (wc == 0xFEFF) continue;
+            // Skip CR — '\n' alone produces KEY_ENTER (matches CRLF semantics
+            // since the LF that follows handles the newline).
+            if (wc == L'\r') continue;
+            // Only ASCII chars have a scancode mapping.  Non-ASCII (and most
+            // high-bit chars) are silently dropped, matching em68030's
+            // CharToScancode behaviour.
+            if (wc > 0x7F) continue;
+            auto [keyCode, needShift] = ::emfe::CharToScancode(static_cast<char>(wc));
+            if (keyCode == 0) continue;
+            if (needShift) m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, true);
+            m_plugin.emfe_push_key(m_instance, keyCode, true);
+            m_plugin.emfe_push_key(m_instance, keyCode, false);
+            if (needShift) m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, false);
+        }
     }
 
     void MainWindow::ConvertToBgra(const EmfeFramebufferInfo& info, const uint8_t* src, uint8_t* dst, int dstStride)
