@@ -3225,8 +3225,12 @@ namespace winrt::emfe::implementation
             if (code != 0) { m_plugin.emfe_push_key(m_instance, code, false); e.Handled(true); }
         });
 
-        // Timer for frame refresh
-        m_fbTimer = DispatcherTimer();
+        // Timer for frame refresh.  Use the low-level DispatcherQueueTimer
+        // (not the XAML DispatcherTimer) so ticks aren't silently dropped
+        // when the UI thread is busy with layout/dialog work — matches the
+        // em68030 standalone framebuffer window and our console-render
+        // timer.
+        m_fbTimer = DispatcherQueue().CreateTimer();
         m_fbTimer.Interval(std::chrono::milliseconds(33));
         m_fbTimer.Tick([this](auto&&, auto&&) { RefreshFramebufferFrame(); });
         m_fbFpsStart = std::chrono::steady_clock::now();
@@ -3290,15 +3294,16 @@ namespace winrt::emfe::implementation
             m_fbInitialSizeApplied = true;
         }
 
-        int srcSize = static_cast<int>(info.stride) * height;
+        // Convert straight from the plugin's VRAM pointer into the bitmap's
+        // pixel buffer.  Previously we memcpy'd VRAM into a `std::vector` and
+        // then converted from there — that wasted ~stride*height of heap
+        // alloc/free per frame (>1 MB at 800x600x16bpp) without buying any
+        // tearing protection (the memcpy already races against guest writes,
+        // so the intermediate snapshot wasn't atomic).
         int dstStride = width * 4;
-        std::vector<uint8_t> src(srcSize);
-        memcpy(src.data(), info.pixels, srcSize);
-
-        // Write to bitmap
         auto pixelBuffer = m_fbBitmap.PixelBuffer();
         uint8_t* dst = pixelBuffer.data();
-        ConvertToBgra(info, src.data(), dst, dstStride);
+        ConvertToBgra(info, static_cast<const uint8_t*>(info.pixels), dst, dstStride);
         m_fbBitmap.Invalidate();
 
         // FPS
