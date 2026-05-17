@@ -3354,11 +3354,11 @@ namespace winrt::emfe::implementation
             // Skip CR — '\n' alone produces KEY_ENTER (matches CRLF semantics
             // since the LF that follows handles the newline).
             if (wc == L'\r') continue;
-            // Only ASCII chars have a KEY_* mapping.  Non-ASCII (and most
+            // Only ASCII chars have a scancode mapping.  Non-ASCII (and most
             // high-bit chars) are silently dropped, matching em68030's
-            // CharToLinuxKey behaviour.
+            // CharToScancode behaviour.
             if (wc > 0x7F) continue;
-            auto [keyCode, needShift] = ::emfe::CharToLinuxKey(static_cast<char>(wc));
+            auto [keyCode, needShift] = ::emfe::CharToScancode(static_cast<char>(wc));
             if (keyCode == 0) continue;
             if (needShift) m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, true);
             m_plugin.emfe_push_key(m_instance, keyCode, true);

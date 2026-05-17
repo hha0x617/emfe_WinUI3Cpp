@@ -158,11 +158,18 @@ inline constexpr int LINUX_BTN_LEFT   = 0x110;
 inline constexpr int LINUX_BTN_RIGHT  = 0x111;
 inline constexpr int LINUX_BTN_MIDDLE = 0x112;
 
-/// Maps an ASCII character to a Linux KEY_* code and whether Shift is needed.
-/// Returns {keyCode, needShift}; keyCode==0 means unmapped.  US layout assumed.
-/// Used by framebuffer-window paste (Ctrl+Shift+V) to translate clipboard text
+/// Maps an ASCII character to a plugin-input scancode and whether Shift is
+/// needed.  Returns {scancode, needShift}; scancode==0 means unmapped.
+/// US layout assumed.
+///
+/// The scancode value is a Linux input-event KEY_* code — that is the
+/// wire format the emfe plugin's input MMIO FIFO uses; it is NOT a
+/// statement about the guest OS.  Linux guests consume it directly via
+/// `input_report_key`; NetBSD guests (Em68030-Guest-NetBSD) translate the
+/// same value to AT Set 1 in the em68030kbd wscons driver.  Used by
+/// framebuffer-window paste (Ctrl+Shift+V) to translate clipboard text
 /// into the synthetic key-down/up sequence the guest input driver expects.
-inline std::pair<uint16_t, bool> CharToLinuxKey(char ch)
+inline std::pair<uint16_t, bool> CharToScancode(char ch)
 {
     switch (ch)
     {
