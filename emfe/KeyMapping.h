@@ -18,6 +18,7 @@
 #pragma once
 
 #include <cstdint>
+#include <utility>
 
 namespace emfe {
 
@@ -156,5 +157,96 @@ inline uint16_t WindowsVkToLinuxKey(int vk)
 inline constexpr int LINUX_BTN_LEFT   = 0x110;
 inline constexpr int LINUX_BTN_RIGHT  = 0x111;
 inline constexpr int LINUX_BTN_MIDDLE = 0x112;
+
+/// Maps an ASCII character to a Linux KEY_* code and whether Shift is needed.
+/// Returns {keyCode, needShift}; keyCode==0 means unmapped.  US layout assumed.
+/// Used by framebuffer-window paste (Ctrl+Shift+V) to translate clipboard text
+/// into the synthetic key-down/up sequence the guest input driver expects.
+inline std::pair<uint16_t, bool> CharToLinuxKey(char ch)
+{
+    switch (ch)
+    {
+        // Lower-case letters
+        case 'a': case 'b': case 'c': case 'd': case 'e':
+        case 'f': case 'g': case 'h': case 'i': case 'j':
+        case 'k': case 'l': case 'm': case 'n': case 'o':
+        case 'p': case 'q': case 'r': case 's': case 't':
+        case 'u': case 'v': case 'w': case 'x': case 'y':
+        case 'z':
+        {
+            static constexpr uint16_t map[] = {
+                30,48,46,32,18,33,34,35,23,36,37,38,50,49,24,25,16,19,31,20,22,47,17,45,21,44
+            };
+            return { map[ch - 'a'], false };
+        }
+        // Upper-case letters
+        case 'A': case 'B': case 'C': case 'D': case 'E':
+        case 'F': case 'G': case 'H': case 'I': case 'J':
+        case 'K': case 'L': case 'M': case 'N': case 'O':
+        case 'P': case 'Q': case 'R': case 'S': case 'T':
+        case 'U': case 'V': case 'W': case 'X': case 'Y':
+        case 'Z':
+        {
+            static constexpr uint16_t map[] = {
+                30,48,46,32,18,33,34,35,23,36,37,38,50,49,24,25,16,19,31,20,22,47,17,45,21,44
+            };
+            return { map[ch - 'A'], true };
+        }
+
+        case '0': return { 11, false };
+        case '1': return { 2,  false };
+        case '2': return { 3,  false };
+        case '3': return { 4,  false };
+        case '4': return { 5,  false };
+        case '5': return { 6,  false };
+        case '6': return { 7,  false };
+        case '7': return { 8,  false };
+        case '8': return { 9,  false };
+        case '9': return { 10, false };
+
+        // Unshifted punctuation (US layout)
+        case '-':  return { 12, false };
+        case '=':  return { 13, false };
+        case '[':  return { 26, false };
+        case ']':  return { 27, false };
+        case '\\': return { 43, false };
+        case ';':  return { 39, false };
+        case '\'': return { 40, false };
+        case '`':  return { 41, false };
+        case ',':  return { 51, false };
+        case '.':  return { 52, false };
+        case '/':  return { 53, false };
+
+        // Shifted punctuation
+        case '!': return { 2,  true };
+        case '@': return { 3,  true };
+        case '#': return { 4,  true };
+        case '$': return { 5,  true };
+        case '%': return { 6,  true };
+        case '^': return { 7,  true };
+        case '&': return { 8,  true };
+        case '*': return { 9,  true };
+        case '(': return { 10, true };
+        case ')': return { 11, true };
+        case '_': return { 12, true };
+        case '+': return { 13, true };
+        case '{': return { 26, true };
+        case '}': return { 27, true };
+        case '|': return { 43, true };
+        case ':': return { 39, true };
+        case '"': return { 40, true };
+        case '~': return { 41, true };
+        case '<': return { 51, true };
+        case '>': return { 52, true };
+        case '?': return { 53, true };
+
+        // Whitespace / control
+        case ' ':  return { 57, false };  // KEY_SPACE
+        case '\n': return { 28, false };  // KEY_ENTER
+        case '\t': return { 15, false };  // KEY_TAB
+
+        default: return { 0, false };
+    }
+}
 
 } // namespace emfe
