@@ -3344,6 +3344,19 @@ namespace winrt::emfe::implementation
         }
         if (text.empty()) return;
 
+        // Hand off to a background coroutine so the per-character throttle
+        // doesn't block the UI thread.  A member coroutine (with get_strong)
+        // is the safe pattern here (lambda + fire_and_forget would dangle
+        // captured `this` once DoFramebufferPaste returns — see the
+        // RunConsolePaste implementation for the same recipe).
+        RunFramebufferPaste(std::move(text));
+    }
+
+    winrt::fire_and_forget MainWindow::RunFramebufferPaste(std::wstring text)
+    {
+        auto self = get_strong();
+        co_await winrt::resume_background();
+
         // The user has Ctrl+Shift physically held down — those were already
         // forwarded to the guest as KEY_LEFTCTRL/KEY_LEFTSHIFT down events.
         // Release them so each pasted character isn't interpreted with the
@@ -3352,6 +3365,30 @@ namespace winrt::emfe::implementation
         constexpr uint16_t KEY_LEFTCTRL  = 29;
         m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, false);
         m_plugin.emfe_push_key(m_instance, KEY_LEFTCTRL,  false);
+
+        // Batch throttle.  The guest em68030input driver polls the
+        // InputDevice FIFO every 10 ms and emits each event as its own
+        // evdev frame; the Linux evdev client buffer (X server) is
+        // 64 entries default.  Pushing all events at once overflows the
+        // buffer, the kernel raises SYN_DROPPED, and X then discards the
+        // entire batch — zero characters reach the focused window.
+        //
+        // The buffer cap (64) is not the real limit in practice — under
+        // heavy renderers (vim in INSERT mode, xterm scrolling each
+        // line) X's event loop stalls for tens of milliseconds while it
+        // draws the previous character through the emulated framebuffer.
+        // During that stall the guest poller keeps feeding evdev, and a
+        // generous batch (16 events) was empirically observed to still
+        // drop characters and newlines on long pastes into vim.
+        //
+        // We therefore push at most 4 events per 15 ms — ~270 events/sec —
+        // which is close to X's drain rate under heavy emulated load
+        // while still being noticeably faster than per-char 15 ms
+        // throttling.  A 100-char paste finishes in roughly 1.1 s,
+        // a 500-char paste in roughly 5.6 s.
+        constexpr int kEventsPerBatch = 4;
+        constexpr int kBatchSleepMs = 15;
+        int eventsSincePause = 2;  // the two release events above
 
         for (wchar_t wc : text) {
             // Skip BOM (some clipboard sources prepend U+FEFF on CF_UNICODETEXT).
@@ -3365,11 +3402,19 @@ namespace winrt::emfe::implementation
             if (wc > 0x7F) continue;
             auto [keyCode, needShift] = ::emfe::CharToScancode(static_cast<char>(wc));
             if (keyCode == 0) continue;
+            int eventsForChar = needShift ? 4 : 2;
             if (needShift) m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, true);
             m_plugin.emfe_push_key(m_instance, keyCode, true);
             m_plugin.emfe_push_key(m_instance, keyCode, false);
             if (needShift) m_plugin.emfe_push_key(m_instance, KEY_LEFTSHIFT, false);
+            eventsSincePause += eventsForChar;
+
+            if (eventsSincePause >= kEventsPerBatch) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(kBatchSleepMs));
+                eventsSincePause = 0;
+            }
         }
+        co_return;
     }
 
     void MainWindow::ConvertToBgra(const EmfeFramebufferInfo& info, const uint8_t* src, uint8_t* dst, int dstStride)
