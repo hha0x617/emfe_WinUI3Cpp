@@ -109,6 +109,34 @@ DLL スキャン:
 5. **逆アセンブリ行のダブルクリック** でブレークポイントをトグル
 6. **Settings → Emulator Settings...** で設定ダイアログを開く (BoardType, メモリサイズ, SCSI ディスク等)
 
+## キーボードショートカット
+
+### シリアルコンソールウィンドウ
+
+| ショートカット | 機能 |
+|----------|--------|
+| **Ctrl+Shift+C** | 選択範囲をホストクリップボードにコピー |
+| **Ctrl+Shift+V** | ホストクリップボードのテキストをゲスト UART に貼り付け |
+| **Ctrl+Shift+A** | 全選択 |
+
+### フレームバッファウィンドウ
+
+| ショートカット | 機能 |
+|----------|--------|
+| **クリック**     | ホストキーボードをキャプチャしてホストカーソルを非表示 |
+| **Esc**          | キャプチャした入力を解除 |
+| **Ctrl+Shift+V** | ホストクリップボードのテキストを synthetic key event としてゲストに送信 |
+
+フレームバッファでの貼り付けは **US キーボード配列** に基づく Linux
+`KEY_*` スキャンコードを送信します。スキャンコードを実際の文字に変換するのは
+ゲスト側 (Linux テキストコンソールならカーネル keymap、X11 なら xkb keymap) で、
+ゲスト X セッションが非 US 配列 (例: JIS) に設定されていると文字が置換されます
+(Shift+9 が `(` ではなく `)` になる等)。回避策はゲスト側 setup_framebuffer
+ガイドに記載されています:
+
+- [Em68030-Guest-Linux setup_framebuffer_ja.md](https://github.com/hha0x617/Em68030-Guest-Linux/blob/main/docs/setup_framebuffer_ja.md)
+- [Em68030-Guest-NetBSD setup_framebuffer_ja.md](https://github.com/hha0x617/Em68030-Guest-NetBSD/blob/main/docs/setup_framebuffer_ja.md)
+
 ## 関連プロジェクト
 
 - [emfe_plugins/api](https://github.com/hha0x617/emfe_plugins/tree/master/api) — 共通 C ABI ヘッダ + 開発者ドキュメント
