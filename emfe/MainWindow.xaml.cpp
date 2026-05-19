@@ -3373,12 +3373,21 @@ namespace winrt::emfe::implementation
         // buffer, the kernel raises SYN_DROPPED, and X then discards the
         // entire batch — zero characters reach the focused window.
         //
-        // We push events freely until ~16 events have accumulated, then
-        // pause for one 10 ms poll cycle to let the guest drain the FIFO
-        // and X drain its evdev buffer.  16 is 1/4 of the 64-entry buffer
-        // so we never come close to overflow even when X is rendering
-        // slowly under emulation.
-        constexpr int kEventsPerBatch = 16;
+        // The buffer cap (64) is not the real limit in practice — under
+        // heavy renderers (vim in INSERT mode, xterm scrolling each
+        // line) X's event loop stalls for tens of milliseconds while it
+        // draws the previous character through the emulated framebuffer.
+        // During that stall the guest poller keeps feeding evdev, and a
+        // generous batch (16 events) was empirically observed to still
+        // drop characters and newlines on long pastes into vim.
+        //
+        // We therefore push at most 4 events per 15 ms — ~270 events/sec —
+        // which is close to X's drain rate under heavy emulated load
+        // while still being noticeably faster than per-char 15 ms
+        // throttling.  A 100-char paste finishes in roughly 1.1 s,
+        // a 500-char paste in roughly 5.6 s.
+        constexpr int kEventsPerBatch = 4;
+        constexpr int kBatchSleepMs = 15;
         int eventsSincePause = 2;  // the two release events above
 
         for (wchar_t wc : text) {
@@ -3401,7 +3410,7 @@ namespace winrt::emfe::implementation
             eventsSincePause += eventsForChar;
 
             if (eventsSincePause >= kEventsPerBatch) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(kBatchSleepMs));
                 eventsSincePause = 0;
             }
         }
