@@ -246,7 +246,16 @@ namespace winrt::emfe::implementation
         // Framebuffer paste (Ctrl+Shift+V): read clipboard text, release Ctrl/Shift in
         // the guest, then synthesise Shift+key+release for each character via the
         // plugin's emfe_push_key.  US layout assumed.
+        //
+        // DoFramebufferPaste reads the clipboard on the UI thread and hands off
+        // to RunFramebufferPaste, which runs on a background thread so it can
+        // throttle event delivery.  Without throttle, ~15 chars (~30+ events
+        // pushed in microseconds) overflow the Linux evdev client-buffer (64
+        // entries default), triggering SYN_DROPPED — X then discards the entire
+        // batch, so paste appears to fail completely past the threshold.
+        // Pacing per-character keeps the buffer drained.
         void DoFramebufferPaste();
+        winrt::fire_and_forget RunFramebufferPaste(std::wstring text);
         void NavigateDisassemblyTo(uint32_t address);
         void UpdateBoardTypeText(winrt::hstring cpuName = L"");
         uint32_t m_lastStopAddress = 0;
