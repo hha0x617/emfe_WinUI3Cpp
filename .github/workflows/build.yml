@@ -183,6 +183,10 @@ jobs:
           TAG="${{ github.ref_name }}"
           INSTALLER=$(ls installer/Output/emfe-WinUI3-Setup-*-*.exe | head -1)
           INSTALLER_NAME=$(basename "$INSTALLER")
+          # Auto-generate "What's Changed" — PRs merged between the previous
+          # v* tag and this one. Returns empty body for the very first release.
+          AUTO_NOTES=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -F tag_name="$TAG" --jq .body 2>/dev/null || true)
           # Delete existing release if tag was moved to a new commit.
           gh release delete "$TAG" --yes 2>/dev/null || true
           gh release create "$TAG" "$INSTALLER" --title "$TAG" --notes "$(cat <<EOF
@@ -205,5 +209,9 @@ jobs:
           ### Source Code (Apache-2.0)
           - **Repository**: [emfe_WinUI3Cpp](https://github.com/${{ github.repository }})
           - **Build workflow**: [.github/workflows/build.yml](https://github.com/${{ github.repository }}/blob/${TAG}/.github/workflows/build.yml)
+
+          ---
+
+          ${AUTO_NOTES}
           EOF
           )"
