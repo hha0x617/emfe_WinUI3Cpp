@@ -114,23 +114,37 @@ jobs:
       - name: Virus scan release artifacts
         shell: pwsh
         run: |
-          Write-Host "Scanning release/ with Windows Defender..."
-          # Signature update is best-effort; occasional failures on the
-          # GitHub runner ("completed with errors") should not fail the
-          # build — the scan still runs with whatever signatures are loaded.
-          try {
-            Update-MpSignature -ErrorAction Stop
-            Write-Host "Signatures updated."
-          } catch {
-            Write-Warning "Signature update failed (continuing with stale signatures): $_"
-          }
-          Start-MpScan -ScanType CustomScan -ScanPath "$PWD\release"
-          $threats = Get-MpThreatDetection 2>$null
-          if ($threats) {
-            Write-Error "Threat detected: $($threats | Format-List | Out-String)"
+          # Invoke Defender via MpCmdRun.exe (the standalone CLI) rather than
+          # the PowerShell `Defender` module's cmdlets (Start-MpScan etc.).
+          # The module wraps WMI/COM and exhibits sporadic "Provider load
+          # failure" on GitHub-hosted Windows runners under pwsh 7; the .exe
+          # is the underlying engine entry point and is unaffected.
+          $mpCmdRun = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mpCmdRun)) {
+            Write-Error "MpCmdRun.exe not found at $mpCmdRun"
             exit 1
           }
-          Write-Host "Scan passed: no threats detected."
+          Write-Host "Scanning release/ with Windows Defender (MpCmdRun.exe)..."
+          # Signature update — best-effort; runner-side failures should not
+          # fail the build, the scan still runs with whatever signatures
+          # are currently loaded.
+          & $mpCmdRun -SignatureUpdate
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Signature update failed (exit $LASTEXITCODE), continuing with stale signatures"
+          }
+          # MpCmdRun exit codes:
+          #   0 = no malware found
+          #   2 = malware detected
+          #   other = engine error
+          & $mpCmdRun -Scan -ScanType 3 -File "$PWD\release" -DisableRemediation
+          switch ($LASTEXITCODE) {
+            0 { Write-Host "Scan passed: no threats detected." }
+            2 { Write-Error "Threat detected (MpCmdRun exit 2)"; exit 1 }
+            default {
+              Write-Error "MpCmdRun scan engine error (exit $LASTEXITCODE)"
+              exit $LASTEXITCODE
+            }
+          }
 
       - name: Upload build artifact (release staging)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -151,21 +165,28 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
-          $installer = Get-ChildItem "installer/Output/emfe-WinUI3-Setup-*-*.exe" | Select-Object -First 1
-          Write-Host "Scanning $($installer.FullName) with Windows Defender..."
-          try {
-            Update-MpSignature -ErrorAction Stop
-            Write-Host "Signatures updated."
-          } catch {
-            Write-Warning "Signature update failed (continuing with stale signatures): $_"
-          }
-          Start-MpScan -ScanType CustomScan -ScanPath $installer.FullName
-          $threats = Get-MpThreatDetection 2>$null
-          if ($threats) {
-            Write-Error "Threat detected: $($threats | Format-List | Out-String)"
+          # See `Virus scan release artifacts` above for rationale on
+          # MpCmdRun.exe vs the Defender PowerShell module.
+          $mpCmdRun = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mpCmdRun)) {
+            Write-Error "MpCmdRun.exe not found at $mpCmdRun"
             exit 1
           }
-          Write-Host "Scan passed: no threats detected."
+          $installer = Get-ChildItem "installer/Output/emfe-WinUI3-Setup-*-*.exe" | Select-Object -First 1
+          Write-Host "Scanning $($installer.FullName) with Windows Defender (MpCmdRun.exe)..."
+          & $mpCmdRun -SignatureUpdate
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Signature update failed (exit $LASTEXITCODE), continuing with stale signatures"
+          }
+          & $mpCmdRun -Scan -ScanType 3 -File $installer.FullName -DisableRemediation
+          switch ($LASTEXITCODE) {
+            0 { Write-Host "Scan passed: no threats detected." }
+            2 { Write-Error "Threat detected (MpCmdRun exit 2)"; exit 1 }
+            default {
+              Write-Error "MpCmdRun scan engine error (exit $LASTEXITCODE)"
+              exit $LASTEXITCODE
+            }
+          }
 
       - name: Upload installer artifact
         if: startsWith(github.ref, 'refs/tags/v')
